@@ -1,0 +1,19 @@
+pde_file: /home/uts22/projects/ML_phisycs/PDE_find/results/T_1.00_k_1.00_cnn_latent8/latent_compact_pde_find.npz
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8.npz
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/vlasov_twostream_param_grid/T_1.00_k_1.00
+system_mode: compact
+space_diff: FD
+used_electric_field: True
+mode_indices: [0, 1, 2, 3, 4, 5, 6, 7]
+solver: Radau
+rk4_substeps: 1
+fill_unmodeled: truth
+solver_success: False
+solver_message: Required step size is less than spacing between numbers.
+solver_nfev: 3470
+solver_mean_relative_l2: 4.640242477266e-01
+solver_max_relative_l2: 4.665362406618e-01
+solver_final_relative_l2: 4.665362406618e-01
+ae_mean_relative_l2: 3.152366160040e-03
+ae_max_relative_l2: 3.153401628749e-03
+ae_final_relative_l2: 3.150458249271e-03

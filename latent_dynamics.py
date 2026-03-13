@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
+from scipy.signal import savgol_filter
 
 REPO_ROOT = Path(__file__).resolve().parent
 TUTORIALS_DIR = REPO_ROOT / "tutorials"
@@ -89,14 +90,14 @@ def parse_args() -> argparse.Namespace:
         "--time-diff",
         type=str,
         default="FD",
-        choices=("poly", "FD", "FDconv", "Tik"),
+        choices=("poly", "FD", "FDconv", "Tik", "SG"),
         help="Time-derivative method passed to PDE-FIND.",
     )
     parser.add_argument(
         "--space-diff",
         type=str,
         default="FD",
-        choices=("poly", "FD", "CD", "FDconv", "Tik", "Fourier"),
+        choices=("poly", "FD", "CD", "FDconv", "Tik", "Fourier", "SG"),
         help="Space-derivative method passed to PDE-FIND.",
     )
     parser.add_argument("--lam", type=float, default=1e-2, help="Ridge parameter for STRidge.")
@@ -141,6 +142,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--deg-x", type=int, default=5, help="Polynomial degree in x.")
     parser.add_argument("--deg-t", type=int, default=None, help="Polynomial degree in t.")
     parser.add_argument("--sigma", type=float, default=2.0, help="Gaussian smoother sigma for FDconv.")
+    parser.add_argument(
+        "--sg-window-x",
+        type=int,
+        default=7,
+        help="Savitzky-Golay odd window length in x when using space-diff=SG.",
+    )
+    parser.add_argument(
+        "--sg-window-t",
+        type=int,
+        default=7,
+        help="Savitzky-Golay odd window length in t when using time-diff=SG.",
+    )
+    parser.add_argument(
+        "--sg-poly-x",
+        type=int,
+        default=3,
+        help="Savitzky-Golay polynomial degree in x when using space-diff=SG.",
+    )
+    parser.add_argument(
+        "--sg-poly-t",
+        type=int,
+        default=3,
+        help="Savitzky-Golay polynomial degree in t when using time-diff=SG.",
+    )
     parser.add_argument(
         "--print-best-tol",
         action="store_true",
@@ -425,6 +450,34 @@ def stabilized_reciprocal(values: np.ndarray, eps: float) -> np.ndarray:
     return 1.0 / safe
 
 
+def validate_savgol_params(window: int, polyorder: int, axis_name: str) -> None:
+    if window <= 0 or window % 2 == 0:
+        raise ValueError(f"SG window for {axis_name} must be a positive odd integer, got {window}")
+    if polyorder < 0:
+        raise ValueError(f"SG polyorder for {axis_name} must be nonnegative, got {polyorder}")
+    if polyorder >= window:
+        raise ValueError(
+            f"SG polyorder for {axis_name} must be smaller than the window length, "
+            f"got polyorder={polyorder}, window={window}"
+        )
+
+
+def savgol_derivative(u: np.ndarray, delta: float, order: int, window: int, polyorder: int) -> np.ndarray:
+    validate_savgol_params(window, polyorder, "derivative")
+    if order < 1:
+        raise ValueError(f"SG derivative order must be positive, got {order}")
+    if order > polyorder:
+        raise ValueError(
+            f"SG derivative order must be <= polyorder, got order={order}, polyorder={polyorder}"
+        )
+    if window > u.size:
+        raise ValueError(f"SG window length {window} exceeds available samples {u.size}")
+    return np.asarray(
+        savgol_filter(u, window_length=window, polyorder=polyorder, deriv=order, delta=delta, mode="interp"),
+        dtype=np.complex64,
+    )
+
+
 def compute_time_derivative(
     field_x_t: np.ndarray,
     dt: float,
@@ -457,6 +510,16 @@ def compute_time_derivative(
     elif args.time_diff == "Tik":
         for i in range(n2):
             ut[i, :] = pde_find.TikhonovDiff(field_x_t[i + offset_x, :], dt, lam_t)
+    elif args.time_diff == "SG":
+        validate_savgol_params(args.sg_window_t, args.sg_poly_t, "t")
+        for i in range(n2):
+            ut[i, :] = savgol_derivative(
+                field_x_t[i + offset_x, :],
+                delta=dt,
+                order=1,
+                window=args.sg_window_t,
+                polyorder=args.sg_poly_t,
+            )
     else:
         for i in range(n2):
             ut[i, :] = pde_find.FiniteDiff(field_x_t[i + offset_x, :], dt, 1)
@@ -504,6 +567,15 @@ def compute_spatial_derivative_stack(
                 ux[:, i] = deriv[offset_x : nx - offset_x]
             elif args.space_diff == "poly":
                 ux[:, i] = poly_cache[i][:, order - 1]
+            elif args.space_diff == "SG":
+                validate_savgol_params(args.sg_window_x, args.sg_poly_x, "x")
+                ux[:, i] = savgol_derivative(
+                    field_x_t[:, i + offset_t],
+                    delta=dx,
+                    order=order,
+                    window=args.sg_window_x,
+                    polyorder=args.sg_poly_x,
+                )[offset_x : nx - offset_x]
             elif args.space_diff == "Fourier":
                 deriv = np.fft.ifft((ik**order) * np.fft.fft(field_x_t[:, i + offset_t]))
                 ux[:, i] = deriv[offset_x : nx - offset_x]
@@ -804,6 +876,10 @@ def save_results(
         "dx": np.asarray(check_uniform_spacing(x, "x"), dtype=np.float64),
         "time_diff": np.asarray(args.time_diff),
         "space_diff": np.asarray(args.space_diff),
+        "sg_window_x": np.asarray(args.sg_window_x, dtype=np.int32),
+        "sg_window_t": np.asarray(args.sg_window_t, dtype=np.int32),
+        "sg_poly_x": np.asarray(args.sg_poly_x, dtype=np.int32),
+        "sg_poly_t": np.asarray(args.sg_poly_t, dtype=np.int32),
         "include_reciprocal": np.asarray(args.include_reciprocal),
         "reciprocal_eps": np.asarray(args.reciprocal_eps, dtype=np.float64),
         "lam": np.asarray(args.lam, dtype=np.float64),
@@ -879,6 +955,10 @@ def main() -> None:
         f"l0_penalty: {args.l0_penalty}",
         f"time_diff: {args.time_diff}",
         f"space_diff: {args.space_diff}",
+        f"sg_window_x: {args.sg_window_x}",
+        f"sg_window_t: {args.sg_window_t}",
+        f"sg_poly_x: {args.sg_poly_x}",
+        f"sg_poly_t: {args.sg_poly_t}",
         f"modes: {modes}",
         "",
     ]
