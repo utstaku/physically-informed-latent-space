@@ -1,0 +1,3 @@
+*.npz
+/init_info.npz
+*.pt
