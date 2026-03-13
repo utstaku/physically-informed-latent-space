@@ -1,3 +1,4 @@
 *.npz
 /init_info.npz
 *.pt
+*.pyc
