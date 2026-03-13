@@ -1,0 +1,27 @@
+fno_checkpoint: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8_fno_dynamics.pt
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8.npz
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/vlasov_twostream_param_grid/T_1.00_k_1.00
+device: cuda
+modeled_modes: [0, 1, 2, 3, 4, 5, 6, 7]
+initial_source: encoder
+fill_unmodeled: truth
+start_index: 0
+num_steps: 1000
+t_start: 0.000000000000e+00
+t_end: 5.000000000000e+00
+hidden_channels: 64
+n_layers: 4
+n_modes_fourier_requested: 16
+latent_mean_relative_l2: 9.816328961873e-02
+latent_max_relative_l2: 2.771287772920e-01
+latent_final_relative_l2: 1.575405125024e-01
+decoded_mean_relative_l2: 2.006301743928e-02
+decoded_max_relative_l2: 5.113661507176e-02
+decoded_final_relative_l2: 3.845378982806e-02
+decoded_mean_mse: 1.511304011195e-03
+decoded_final_mse: 3.869577291426e-03
+ae_mean_relative_l2: 7.908944146433e-03
+ae_max_relative_l2: 2.869906483695e-02
+ae_final_relative_l2: 2.869906483695e-02
+ae_mean_mse: 2.513519259247e-04
+ae_final_mse: 2.155364472402e-03

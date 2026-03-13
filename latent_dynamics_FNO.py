@@ -27,8 +27,8 @@ except ImportError as exc:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Train a 1D Fourier Neural Operator on latent trajectories so that "
-            "z(x, t) -> z(x, t + dt)."
+            "Train a 1D Fourier Neural Operator on latent trajectories with a "
+            "recursive multi-step rollout loss so that z(x, t) -> z(x, t + dt)."
         )
     )
     parser.add_argument(
@@ -56,6 +56,34 @@ def parse_args() -> argparse.Namespace:
         default="sequential",
         choices=("sequential", "random"),
         help="Whether to split transitions sequentially in time or randomly.",
+    )
+    parser.add_argument(
+        "--rollout-steps",
+        type=int,
+        default=5,
+        help="Number of recursive rollout steps K used in the training loss.",
+    )
+    parser.add_argument(
+        "--rollout-loss-weights",
+        type=str,
+        default=None,
+        help=(
+            "Optional comma-separated weights for steps 2..K in the rollout loss. "
+            "Defaults to uniform weights. For backward compatibility, passing K "
+            "weights is also accepted and the first weight is ignored."
+        ),
+    )
+    parser.add_argument(
+        "--lambda-one-step",
+        type=float,
+        default=1.0,
+        help="Weight lambda_1 applied to the one-step loss term l_1.",
+    )
+    parser.add_argument(
+        "--lambda-rollout",
+        type=float,
+        default=0.1,
+        help="Weight lambda_roll applied to the rollout loss terms l_2,...,l_K.",
     )
     parser.add_argument("--epochs", type=int, default=200, help="Training epochs.")
     parser.add_argument("--batch-size", type=int, default=32, help="Mini-batch size.")
@@ -209,11 +237,32 @@ def resolve_spectral_modes(requested_modes: int, nx: int) -> int:
     return min(requested_modes, max(nx // 2, 1))
 
 
-def build_one_step_pairs(latent: np.ndarray, modes: Sequence[int]) -> Tuple[np.ndarray, np.ndarray]:
+def build_latent_channel_sequence(latent: np.ndarray, modes: Sequence[int]) -> np.ndarray:
     selected = latent[:, :, modes].astype(np.float32)
-    inputs = np.transpose(selected[:-1], (0, 2, 1))
-    targets = np.transpose(selected[1:], (0, 2, 1))
-    return inputs, targets
+    return np.transpose(selected, (0, 2, 1))
+
+
+def resolve_rollout_weights(num_steps: int, spec: str | None) -> np.ndarray:
+    if num_steps <= 0:
+        raise ValueError(f"--rollout-steps must be positive, got {num_steps}")
+    if num_steps == 1:
+        return np.empty((0,), dtype=np.float32)
+    if spec is None:
+        return np.ones(num_steps - 1, dtype=np.float32)
+
+    weights = np.asarray([float(token.strip()) for token in spec.split(",") if token.strip()], dtype=np.float32)
+    if weights.size == num_steps:
+        weights = weights[1:]
+    if weights.size != num_steps - 1:
+        raise ValueError(
+            f"--rollout-loss-weights must contain exactly {num_steps - 1} comma-separated values "
+            f"for steps 2..{num_steps}, got {weights.size}."
+        )
+    if np.any(weights < 0.0):
+        raise ValueError(f"--rollout-loss-weights must be non-negative, got {weights}.")
+    if weights.size > 0 and not np.any(weights > 0.0):
+        raise ValueError("--rollout-loss-weights must contain at least one positive value.")
+    return weights
 
 
 def split_transition_indices(
@@ -223,11 +272,13 @@ def split_transition_indices(
     seed: int,
 ) -> Tuple[np.ndarray, np.ndarray]:
     if num_samples < 2:
-        raise ValueError("At least two one-step transition samples are required.")
-    if not (0.0 < train_fraction < 1.0):
-        raise ValueError(f"train_fraction must lie in (0, 1), got {train_fraction}")
+        raise ValueError("At least two rollout start indices are required.")
+    if not (0.0 < train_fraction <= 1.0):
+        raise ValueError(f"train_fraction must lie in (0, 1], got {train_fraction}")
 
     if split_mode == "sequential":
+        if train_fraction == 1.0:
+            return np.arange(num_samples, dtype=np.int64), np.empty((0,), dtype=np.int64)
         split = int(num_samples * train_fraction)
         split = min(max(split, 1), num_samples - 1)
         train_idx = np.arange(split, dtype=np.int64)
@@ -237,6 +288,8 @@ def split_transition_indices(
     rng = np.random.default_rng(seed)
     indices = np.arange(num_samples, dtype=np.int64)
     rng.shuffle(indices)
+    if train_fraction == 1.0:
+        return np.sort(indices), np.empty((0,), dtype=np.int64)
     split = int(num_samples * train_fraction)
     split = min(max(split, 1), num_samples - 1)
     train_idx = np.sort(indices[:split])
@@ -245,17 +298,33 @@ def split_transition_indices(
 
 
 def normalize_from_train(
-    inputs: np.ndarray,
-    targets: np.ndarray,
+    sequence: np.ndarray,
     train_idx: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    stacked = np.concatenate([inputs[train_idx], targets[train_idx]], axis=0)
+    rollout_steps: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    stacked = np.concatenate([sequence[train_idx + offset] for offset in range(rollout_steps + 1)], axis=0)
     mean = stacked.mean(axis=(0, 2), keepdims=True).astype(np.float32)
     std = stacked.std(axis=(0, 2), keepdims=True).astype(np.float32)
     std = np.where(std < 1e-6, 1.0, std).astype(np.float32)
-    normalized_inputs = ((inputs - mean) / std).astype(np.float32)
-    normalized_targets = ((targets - mean) / std).astype(np.float32)
-    return normalized_inputs, normalized_targets, mean, std
+    normalized_sequence = ((sequence - mean) / std).astype(np.float32)
+    return normalized_sequence, mean, std
+
+
+def build_rollout_arrays(
+    sequence: np.ndarray,
+    start_indices: np.ndarray,
+    rollout_steps: int,
+) -> Tuple[np.ndarray, np.ndarray]:
+    if start_indices.size == 0:
+        channels = sequence.shape[1]
+        nx = sequence.shape[2]
+        return (
+            np.empty((0, channels, nx), dtype=np.float32),
+            np.empty((0, rollout_steps, channels, nx), dtype=np.float32),
+        )
+    inputs = sequence[start_indices]
+    targets = np.stack([sequence[start_indices + step] for step in range(1, rollout_steps + 1)], axis=1)
+    return inputs.astype(np.float32), targets.astype(np.float32)
 
 
 def build_loader(
@@ -292,21 +361,53 @@ def build_model(
     )
 
 
+def compute_rollout_loss(
+    model: nn.Module,
+    batch_inputs: torch.Tensor,
+    batch_targets: torch.Tensor,
+    rollout_weights: torch.Tensor,
+    lambda_one_step: float,
+    lambda_rollout: float,
+    criterion: nn.Module,
+) -> torch.Tensor:
+    state = batch_inputs
+    total_loss = batch_inputs.new_zeros(())
+    for step_index in range(batch_targets.shape[1]):
+        state = model(state)
+        step_loss = criterion(state, batch_targets[:, step_index])
+        if step_index == 0:
+            total_loss = total_loss + lambda_one_step * step_loss
+        elif rollout_weights.numel() > 0:
+            total_loss = total_loss + lambda_rollout * rollout_weights[step_index - 1] * step_loss
+    return total_loss
+
+
 @torch.no_grad()
 def evaluate_model(
     model: nn.Module,
     loader: DataLoader,
+    rollout_weights: np.ndarray,
+    lambda_one_step: float,
+    lambda_rollout: float,
     device: torch.device,
 ) -> float:
     model.eval()
     criterion = nn.MSELoss(reduction="mean")
+    rollout_weights_tensor = torch.as_tensor(rollout_weights, device=device, dtype=torch.float32)
     total_loss = 0.0
     total_count = 0
     for batch_inputs, batch_targets in loader:
         batch_inputs = batch_inputs.to(device)
         batch_targets = batch_targets.to(device)
-        batch_preds = model(batch_inputs)
-        loss = criterion(batch_preds, batch_targets)
+        loss = compute_rollout_loss(
+            model=model,
+            batch_inputs=batch_inputs,
+            batch_targets=batch_targets,
+            rollout_weights=rollout_weights_tensor,
+            lambda_one_step=lambda_one_step,
+            lambda_rollout=lambda_rollout,
+            criterion=criterion,
+        )
         batch_size = batch_inputs.shape[0]
         total_loss += float(loss.item()) * batch_size
         total_count += batch_size
@@ -318,6 +419,9 @@ def train_model(
     train_targets: np.ndarray,
     val_inputs: np.ndarray,
     val_targets: np.ndarray,
+    rollout_weights: np.ndarray,
+    lambda_one_step: float,
+    lambda_rollout: float,
     args: argparse.Namespace,
     device: torch.device,
 ) -> Tuple[nn.Module, np.ndarray, np.ndarray, np.ndarray]:
@@ -338,9 +442,14 @@ def train_model(
         )
 
     criterion = nn.MSELoss(reduction="mean")
+    rollout_weights_tensor = torch.as_tensor(rollout_weights, device=device, dtype=torch.float32)
     train_loader = build_loader(train_inputs, train_targets, batch_size=args.batch_size, shuffle=True)
     eval_train_loader = build_loader(train_inputs, train_targets, batch_size=args.batch_size, shuffle=False)
-    val_loader = build_loader(val_inputs, val_targets, batch_size=args.batch_size, shuffle=False)
+    val_loader = (
+        build_loader(val_inputs, val_targets, batch_size=args.batch_size, shuffle=False)
+        if val_inputs.shape[0] > 0
+        else None
+    )
 
     train_losses: List[float] = []
     val_losses: List[float] = []
@@ -352,15 +461,40 @@ def train_model(
             batch_inputs = batch_inputs.to(device)
             batch_targets = batch_targets.to(device)
             optimizer.zero_grad(set_to_none=True)
-            batch_preds = model(batch_inputs)
-            loss = criterion(batch_preds, batch_targets)
+            loss = compute_rollout_loss(
+                model=model,
+                batch_inputs=batch_inputs,
+                batch_targets=batch_targets,
+                rollout_weights=rollout_weights_tensor,
+                lambda_one_step=lambda_one_step,
+                lambda_rollout=lambda_rollout,
+                criterion=criterion,
+            )
             loss.backward()
             optimizer.step()
 
-        train_loss = evaluate_model(model, eval_train_loader, device)
-        val_loss = evaluate_model(model, val_loader, device)
+        train_loss = evaluate_model(
+            model,
+            eval_train_loader,
+            rollout_weights,
+            lambda_one_step,
+            lambda_rollout,
+            device,
+        )
+        val_loss = (
+            evaluate_model(
+                model,
+                val_loader,
+                rollout_weights,
+                lambda_one_step,
+                lambda_rollout,
+                device,
+            )
+            if val_loader is not None
+            else float("nan")
+        )
         if scheduler is not None:
-            scheduler.step(val_loss)
+            scheduler.step(train_loss if not np.isfinite(val_loss) else val_loss)
         current_lr = float(optimizer.param_groups[0]["lr"])
 
         train_losses.append(train_loss)
@@ -368,7 +502,7 @@ def train_model(
         lr_history.append(current_lr)
         print(
             f"Epoch {epoch + 1:03d}/{args.epochs:03d} "
-            f"train_mse={train_loss:.6e} val_mse={val_loss:.6e} lr={current_lr:.6e}"
+            f"train_loss={train_loss:.6e} val_loss={val_loss:.6e} lr={current_lr:.6e}"
         )
 
     return (
@@ -386,6 +520,8 @@ def predict_batches(
     batch_size: int,
     device: torch.device,
 ) -> np.ndarray:
+    if inputs.shape[0] == 0:
+        return np.empty_like(inputs, dtype=np.float32)
     model.eval()
     loader = DataLoader(torch.from_numpy(inputs), batch_size=batch_size, shuffle=False, drop_last=False)
     outputs: List[np.ndarray] = []
@@ -525,6 +661,8 @@ def save_results(
         "dx": np.asarray(dx, dtype=np.float32),
         "train_transition_indices": train_idx.astype(np.int32),
         "val_transition_indices": val_idx.astype(np.int32),
+        "train_window_start_indices": train_idx.astype(np.int32),
+        "val_window_start_indices": val_idx.astype(np.int32),
         "feature_mean": mean.astype(np.float32),
         "feature_std": std.astype(np.float32),
         "train_losses": train_losses,
@@ -539,6 +677,10 @@ def save_results(
         "n_modes_fourier": np.asarray(spectral_modes, dtype=np.int32),
         "train_fraction": np.asarray(args.train_fraction, dtype=np.float32),
         "split_mode": np.asarray(args.split_mode),
+        "rollout_steps": np.asarray(args.rollout_steps, dtype=np.int32),
+        "rollout_loss_weights": resolve_rollout_weights(args.rollout_steps, args.rollout_loss_weights),
+        "lambda_one_step": np.asarray(args.lambda_one_step, dtype=np.float32),
+        "lambda_rollout": np.asarray(args.lambda_rollout, dtype=np.float32),
         "seed": np.asarray(args.seed, dtype=np.int32),
     }
     payload.update(metrics)
@@ -567,24 +709,29 @@ def main() -> None:
     dt = check_uniform_spacing(t, "t")
     dx = check_uniform_spacing(x, "x")
     nt, nx, nz = latent.shape
-    if nt < 3:
-        raise ValueError(f"At least Nt=3 is required for one-step dynamics training, got Nt={nt}")
+    if nt < args.rollout_steps + 2:
+        raise ValueError(
+            f"At least Nt={args.rollout_steps + 2} is required for rollout_steps={args.rollout_steps}, got Nt={nt}"
+        )
 
     modes = resolve_modes(args.modes, nz)
     spectral_modes = resolve_spectral_modes(args.n_modes, nx)
-    inputs, targets = build_one_step_pairs(latent, modes)
+    rollout_weights = resolve_rollout_weights(args.rollout_steps, args.rollout_loss_weights)
+    latent_channels_x = build_latent_channel_sequence(latent, modes)
     train_idx, val_idx = split_transition_indices(
-        num_samples=inputs.shape[0],
+        num_samples=latent_channels_x.shape[0] - args.rollout_steps,
         train_fraction=args.train_fraction,
         split_mode=args.split_mode,
         seed=args.seed,
     )
-    inputs_norm, targets_norm, mean, std = normalize_from_train(inputs, targets, train_idx)
+    latent_channels_x_norm, mean, std = normalize_from_train(
+        latent_channels_x,
+        train_idx,
+        args.rollout_steps,
+    )
 
-    train_inputs = inputs_norm[train_idx]
-    train_targets = targets_norm[train_idx]
-    val_inputs = inputs_norm[val_idx]
-    val_targets = targets_norm[val_idx]
+    train_inputs, train_targets = build_rollout_arrays(latent_channels_x_norm, train_idx, args.rollout_steps)
+    val_inputs, val_targets = build_rollout_arrays(latent_channels_x_norm, val_idx, args.rollout_steps)
 
     output_path = args.output.resolve() if args.output is not None else infer_output_path(latent_file)
     checkpoint_path = (
@@ -597,23 +744,34 @@ def main() -> None:
     print(f"Using latent modes: {modes}")
     print(f"Device: {device}")
     print(f"dx={dx:.6e}, dt={dt:.6e}")
-    print(f"Train transitions: {len(train_idx)}, validation transitions: {len(val_idx)}")
+    print(f"Rollout steps K: {args.rollout_steps}")
+    print(f"lambda_1: {args.lambda_one_step:.6e}")
+    print(f"lambda_roll: {args.lambda_rollout:.6e}")
+    print(f"Rollout weights: {rollout_weights.tolist()}")
+    print(f"Train windows: {len(train_idx)}, validation windows: {len(val_idx)}")
 
     model, train_losses, val_losses, lr_history = train_model(
         train_inputs=train_inputs,
         train_targets=train_targets,
         val_inputs=val_inputs,
         val_targets=val_targets,
+        rollout_weights=rollout_weights,
+        lambda_one_step=args.lambda_one_step,
+        lambda_rollout=args.lambda_rollout,
         args=args,
         device=device,
     )
 
-    one_step_pred_norm = predict_batches(model, val_inputs, batch_size=args.batch_size, device=device)
-    one_step_pred = unnormalize(one_step_pred_norm, mean, std)
-    one_step_target = targets[val_idx].astype(np.float32)
-    one_step_metrics = {f"one_step_{k}": v for k, v in compute_metrics(one_step_pred, one_step_target).items()}
+    if len(val_idx) > 0:
+        one_step_pred_norm = predict_batches(model, val_inputs, batch_size=args.batch_size, device=device)
+        one_step_pred = unnormalize(one_step_pred_norm, mean, std)
+        one_step_target = latent_channels_x[val_idx + 1].astype(np.float32)
+        one_step_metrics = {f"one_step_{k}": v for k, v in compute_metrics(one_step_pred, one_step_target).items()}
+    else:
+        one_step_pred = None
+        one_step_target = None
+        one_step_metrics = {}
 
-    latent_channels_x = np.transpose(latent[:, :, modes].astype(np.float32), (0, 2, 1))
     rollout_pred, rollout_target, rollout_metrics = compute_rollout_payload(
         model=model,
         latent_channels_x=latent_channels_x,
@@ -629,6 +787,8 @@ def main() -> None:
     metrics: Dict[str, np.ndarray] = {
         "final_train_loss": np.asarray(train_losses[-1], dtype=np.float32),
         "final_val_loss": np.asarray(val_losses[-1], dtype=np.float32),
+        "final_train_rollout_loss": np.asarray(train_losses[-1], dtype=np.float32),
+        "final_val_rollout_loss": np.asarray(val_losses[-1], dtype=np.float32),
         **one_step_metrics,
         **rollout_metrics,
     }
@@ -676,8 +836,12 @@ def main() -> None:
         f"dx: {dx:.8e}",
         f"train_fraction: {args.train_fraction:.4f}",
         f"split_mode: {args.split_mode}",
-        f"train_transitions: {len(train_idx)}",
-        f"val_transitions: {len(val_idx)}",
+        f"rollout_steps: {args.rollout_steps}",
+        f"lambda_one_step: {args.lambda_one_step:.8e}",
+        f"lambda_rollout: {args.lambda_rollout:.8e}",
+        f"rollout_loss_weights: {rollout_weights.tolist()}",
+        f"train_windows: {len(train_idx)}",
+        f"val_windows: {len(val_idx)}",
         f"hidden_channels: {args.hidden_channels}",
         f"n_layers: {args.n_layers}",
         f"n_modes_fourier: {spectral_modes}",
@@ -685,13 +849,18 @@ def main() -> None:
         f"batch_size: {args.batch_size}",
         f"learning_rate: {args.learning_rate:.8e}",
         f"weight_decay: {args.weight_decay:.8e}",
-        f"final_train_loss: {float(train_losses[-1]):.8e}",
-        f"final_val_loss: {float(val_losses[-1]):.8e}",
-        f"one_step_mse: {float(one_step_metrics['one_step_mse']):.8e}",
-        f"one_step_rmse: {float(one_step_metrics['one_step_rmse']):.8e}",
-        f"one_step_relative_l2: {float(one_step_metrics['one_step_relative_l2']):.8e}",
-        f"one_step_relative_l2_percent: {float(one_step_metrics['one_step_relative_l2_percent']):.4f}",
+        f"final_train_rollout_loss: {float(train_losses[-1]):.8e}",
+        f"final_val_rollout_loss: {float(val_losses[-1]):.8e}",
     ]
+    if one_step_metrics:
+        report_lines.extend(
+            [
+                f"one_step_mse: {float(one_step_metrics['one_step_mse']):.8e}",
+                f"one_step_rmse: {float(one_step_metrics['one_step_rmse']):.8e}",
+                f"one_step_relative_l2: {float(one_step_metrics['one_step_relative_l2']):.8e}",
+                f"one_step_relative_l2_percent: {float(one_step_metrics['one_step_relative_l2_percent']):.4f}",
+            ]
+        )
     if rollout_metrics:
         report_lines.extend(
             [
