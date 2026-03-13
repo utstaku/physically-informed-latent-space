@@ -2,3 +2,4 @@
 /init_info.npz
 *.pt
 *.pyc
+/tutorials/
