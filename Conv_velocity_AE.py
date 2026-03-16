@@ -106,7 +106,7 @@ def parse_args() -> argparse.Namespace:
         "--train-fraction",
         type=float,
         default=0.9,
-        help="Fraction of flattened samples used for training.",
+        help="Fraction of flattened samples used for training. Passing 1.0 reuses training samples for validation.",
     )
     parser.add_argument(
         "--seed",
@@ -137,6 +137,12 @@ def parse_args() -> argparse.Namespace:
         "--save-reconstruction",
         action="store_true",
         help="Save reconstructed f(t, x, v) in the output file.",
+    )
+    parser.add_argument(
+        "--density-weight",
+        type=float,
+        default=0.0,
+        help="Weight for an auxiliary density reconstruction loss on n(x, t) = integral f dv.",
     )
     parser.add_argument(
         "--smoothness-weight",
@@ -252,14 +258,18 @@ def split_indices(
     train_fraction: float,
     rng: np.random.Generator,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    if not (0.0 < train_fraction < 1.0):
-        raise ValueError(f"train_fraction must be in (0, 1), got {train_fraction}")
+    if not (0.0 < train_fraction <= 1.0):
+        raise ValueError(f"train_fraction must be in (0, 1], got {train_fraction}")
 
     indices = np.arange(num_samples)
     rng.shuffle(indices)
-    split = int(num_samples * train_fraction)
-    train_idx = indices[:split]
-    val_idx = indices[split:]
+    if train_fraction == 1.0:
+        train_idx = np.sort(indices)
+        val_idx = train_idx.copy()
+    else:
+        split = int(num_samples * train_fraction)
+        train_idx = indices[:split]
+        val_idx = indices[split:]
     if len(train_idx) == 0 or len(val_idx) == 0:
         raise ValueError("train_fraction produced an empty train or validation split.")
     return train_idx, val_idx
@@ -424,6 +434,18 @@ def build_dataloader(samples: np.ndarray, batch_size: int, shuffle: bool) -> Dat
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=False)
 
 
+def trapezoid_weights(v: np.ndarray) -> np.ndarray:
+    v = np.asarray(v, dtype=np.float64)
+    if v.ndim != 1 or v.size < 2:
+        raise ValueError("v must be a 1D array with at least two points.")
+    weights = np.empty_like(v)
+    weights[0] = 0.5 * (v[1] - v[0])
+    weights[-1] = 0.5 * (v[-1] - v[-2])
+    if v.size > 2:
+        weights[1:-1] = 0.5 * (v[2:] - v[:-2])
+    return weights.astype(np.float32)
+
+
 def reshape_sample_grid(samples: np.ndarray, nt: int, nx: int) -> np.ndarray:
     return samples.reshape(nt, nx, samples.shape[-1])
 
@@ -572,8 +594,30 @@ def compute_regularization_loss(
     return total_loss * scale, smoothness_loss_total * scale, dynamics_loss_total * scale
 
 
+def compute_density_loss(
+    recon: torch.Tensor,
+    batch: torch.Tensor,
+    feature_mean: torch.Tensor,
+    feature_std: torch.Tensor,
+    density_weights: torch.Tensor,
+) -> torch.Tensor:
+    recon_phys = recon * feature_std + feature_mean
+    batch_phys = batch * feature_std + feature_mean
+    recon_density = torch.sum(recon_phys * density_weights, dim=-1)
+    batch_density = torch.sum(batch_phys * density_weights, dim=-1)
+    return torch.mean((recon_density - batch_density) ** 2)
+
+
 @torch.no_grad()
-def evaluate_loss(model: nn.Module, loader: DataLoader, device: torch.device) -> float:
+def evaluate_loss(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+    density_weight: float,
+    feature_mean: torch.Tensor,
+    feature_std: torch.Tensor,
+    density_weights: torch.Tensor,
+) -> float:
     model.eval()
     criterion = nn.MSELoss(reduction="mean")
     total_loss = 0.0
@@ -582,6 +626,14 @@ def evaluate_loss(model: nn.Module, loader: DataLoader, device: torch.device) ->
         batch = batch.to(device)
         recon = model(batch)
         loss = criterion(recon, batch)
+        if density_weight > 0.0:
+            loss = loss + density_weight * compute_density_loss(
+                recon=recon,
+                batch=batch,
+                feature_mean=feature_mean,
+                feature_std=feature_std,
+                density_weights=density_weights,
+            )
         batch_size = batch.shape[0]
         total_loss += float(loss.item()) * batch_size
         total_count += batch_size
@@ -613,6 +665,10 @@ def train_autoencoder(
     reg_time_window: int,
     reg_x_window: int,
     reg_patches_per_epoch: int,
+    density_weight: float,
+    feature_mean: np.ndarray,
+    feature_std: np.ndarray,
+    density_weights: np.ndarray,
     seed: int,
     device: torch.device,
 ) -> Tuple[ConvVelocityAutoencoder, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -634,6 +690,9 @@ def train_autoencoder(
             min_lr=min_lr,
         )
     criterion = nn.MSELoss(reduction="mean")
+    feature_mean_tensor = torch.as_tensor(feature_mean.reshape(1, 1, -1), dtype=torch.float32, device=device)
+    feature_std_tensor = torch.as_tensor(feature_std.reshape(1, 1, -1), dtype=torch.float32, device=device)
+    density_weights_tensor = torch.as_tensor(density_weights.reshape(1, 1, -1), dtype=torch.float32, device=device)
 
     train_loader = build_dataloader(train_samples, batch_size=batch_size, shuffle=True)
     eval_train_loader = build_dataloader(train_samples, batch_size=batch_size, shuffle=False)
@@ -653,6 +712,14 @@ def train_autoencoder(
             optimizer.zero_grad(set_to_none=True)
             recon = model(batch)
             loss = criterion(recon, batch)
+            if density_weight > 0.0:
+                loss = loss + density_weight * compute_density_loss(
+                    recon=recon,
+                    batch=batch,
+                    feature_mean=feature_mean_tensor,
+                    feature_std=feature_std_tensor,
+                    density_weights=density_weights_tensor,
+                )
             loss.backward()
             optimizer.step()
 
@@ -682,8 +749,24 @@ def train_autoencoder(
                 epoch_smoothness = float(smoothness_loss.detach().cpu().item())
                 epoch_dynamics = float(dynamics_loss.detach().cpu().item())
 
-        train_loss = evaluate_loss(model, eval_train_loader, device)
-        val_loss = evaluate_loss(model, val_loader, device)
+        train_loss = evaluate_loss(
+            model,
+            eval_train_loader,
+            device,
+            density_weight,
+            feature_mean_tensor,
+            feature_std_tensor,
+            density_weights_tensor,
+        )
+        val_loss = evaluate_loss(
+            model,
+            val_loader,
+            device,
+            density_weight,
+            feature_mean_tensor,
+            feature_std_tensor,
+            density_weights_tensor,
+        )
         if scheduler is not None:
             scheduler.step(val_loss)
         current_lr = float(optimizer.param_groups[0]["lr"])
@@ -694,7 +777,7 @@ def train_autoencoder(
         dynamics_history.append(epoch_dynamics)
         print(
             f"Epoch {epoch + 1:03d}/{epochs:03d} "
-            f"train_mse={train_loss:.6e} val_mse={val_loss:.6e} "
+            f"train_obj={train_loss:.6e} val_obj={val_loss:.6e} "
             f"smooth={epoch_smoothness:.6e} dyn={epoch_dynamics:.6e} lr={current_lr:.6e}"
         )
 
@@ -749,18 +832,26 @@ def reconstruct_all(
     return recon.reshape(original_shape).astype(np.float32)
 
 
-def reconstruction_metrics(reconstruction: np.ndarray, target: np.ndarray) -> Dict[str, np.ndarray]:
+def reconstruction_metrics(reconstruction: np.ndarray, target: np.ndarray, v: np.ndarray) -> Dict[str, np.ndarray]:
     diff = reconstruction - target
     mse = np.mean(diff**2, dtype=np.float64)
     rmse = np.float64(np.sqrt(mse))
     denom = np.linalg.norm(target.reshape(-1), ord=2)
     rel_l2 = np.linalg.norm(diff.reshape(-1), ord=2) / denom if denom > 0.0 else 0.0
     rel_l2_percent = rel_l2 * 100.0
+    recon_density = np.trapezoid(reconstruction, np.asarray(v, dtype=np.float64), axis=-1)
+    target_density = np.trapezoid(target, np.asarray(v, dtype=np.float64), axis=-1)
+    density_diff = recon_density - target_density
+    density_mse = np.mean(density_diff**2, dtype=np.float64)
+    density_denom = np.linalg.norm(target_density.reshape(-1), ord=2)
+    density_rel_l2 = np.linalg.norm(density_diff.reshape(-1), ord=2) / density_denom if density_denom > 0.0 else 0.0
     return {
         "reconstruction_mse": np.asarray(mse, dtype=np.float64),
         "reconstruction_rmse": np.asarray(rmse, dtype=np.float64),
         "reconstruction_relative_l2": np.asarray(rel_l2, dtype=np.float64),
         "reconstruction_relative_l2_percent": np.asarray(rel_l2_percent, dtype=np.float64),
+        "density_reconstruction_mse": np.asarray(density_mse, dtype=np.float64),
+        "density_reconstruction_relative_l2": np.asarray(density_rel_l2, dtype=np.float64),
     }
 
 
@@ -864,6 +955,7 @@ def save_results(
         "smoothness_space_weight": np.asarray(args.smoothness_space_weight, dtype=np.float32),
         "dynamics_weight": np.asarray(args.dynamics_weight, dtype=np.float32),
         "dynamics_ridge": np.asarray(args.dynamics_ridge, dtype=np.float32),
+        "density_weight": np.asarray(args.density_weight, dtype=np.float32),
         "reg_time_window": np.asarray(args.reg_time_window, dtype=np.int32),
         "reg_x_window": np.asarray(args.reg_x_window, dtype=np.int32),
         "reg_patches_per_epoch": np.asarray(args.reg_patches_per_epoch, dtype=np.int32),
@@ -899,6 +991,7 @@ def main() -> None:
     train_idx, val_idx = split_indices(len(samples), args.train_fraction, rng)
     samples_norm, mean, std = normalize_from_train(samples, train_idx)
     samples_grid = reshape_sample_grid(samples_norm, nt=nt, nx=nx)
+    density_weights = trapezoid_weights(v)
     dt = float(np.mean(np.diff(t)))
     dx = float(np.mean(np.diff(x)))
 
@@ -930,6 +1023,10 @@ def main() -> None:
         reg_time_window=args.reg_time_window,
         reg_x_window=args.reg_x_window,
         reg_patches_per_epoch=args.reg_patches_per_epoch,
+        density_weight=args.density_weight,
+        feature_mean=mean,
+        feature_std=std,
+        density_weights=density_weights,
         seed=args.seed,
         device=device,
     )
@@ -955,11 +1052,13 @@ def main() -> None:
         batch_size=args.batch_size,
         device=device,
     )
-    metrics = reconstruction_metrics(full_reconstruction, f_t_x_v)
+    metrics = reconstruction_metrics(full_reconstruction, f_t_x_v, v)
     print(f"Reconstruction MSE   : {float(metrics['reconstruction_mse']):.6e}")
     print(f"Reconstruction RMSE  : {float(metrics['reconstruction_rmse']):.6e}")
     print(f"Reconstruction relL2 : {float(metrics['reconstruction_relative_l2']):.6e}")
     print(f"Reconstruction error : {float(metrics['reconstruction_relative_l2_percent']):.3f}%")
+    print(f"Density recon MSE    : {float(metrics['density_reconstruction_mse']):.6e}")
+    print(f"Density recon relL2  : {float(metrics['density_reconstruction_relative_l2']):.6e}")
 
     reconstruction = full_reconstruction if args.save_reconstruction else None
 

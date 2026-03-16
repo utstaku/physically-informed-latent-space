@@ -29,29 +29,29 @@ except ImportError as exc:
 from Conv_velocity_AE import ConvVelocityAutoencoder
 from latent_dynamics import load_latent_data, resolve_electric_data
 from reconstruct_e_field import load_distribution as load_case_distribution
+from reconstruct_e_field import reconstruct_electric_field
 
 
 TOKEN_PATTERN = re.compile(r"(inv_(?:z\d+|z|E)|(?:z\d+|z|E))(?:\^(\d+))?")
 DERIV_PATTERN = re.compile(r"((?:z\d+|z|E)_\{(x+)\})$")
+FACTOR_WITH_POWER_PATTERN = re.compile(r"^(.*?)(?:\^(\d+))?$")
+PLAIN_FACTOR_PATTERN = re.compile(r"^(z\d+|z|E|z_\d+)$")
+UNDERSCORE_DERIV_PATTERN = re.compile(r"^(z(?:_\d+)?|E)_(x+)$")
+BRACE_DERIV_PATTERN = re.compile(r"^(z\d+|z|E)_\{(x+)\}$")
 
 
 @dataclass(frozen=True)
-class PolynomialFactor:
+class FactorSpec:
     name: str
     power: int
-
-
-@dataclass(frozen=True)
-class DerivativeFactor:
-    name: str
-    order: int
+    derivative_order: int = 0
+    reciprocal: bool = False
 
 
 @dataclass(frozen=True)
 class TermSpec:
     raw: str
-    polynomial_factors: tuple[PolynomialFactor, ...]
-    derivative_factor: DerivativeFactor | None
+    factors: tuple[FactorSpec, ...]
 
 
 @dataclass
@@ -205,8 +205,6 @@ def parse_args() -> argparse.Namespace:
 
 def load_pde_payload(pde_file: Path, latent_file_override: Path | None) -> PDEPayload:
     with np.load(pde_file, allow_pickle=False) as data:
-        if "coefficients_real" not in data or "coefficients_imag" not in data:
-            raise KeyError(f"{pde_file} must contain 'coefficients_real' and 'coefficients_imag'.")
         if "mode_indices" not in data:
             raise KeyError(f"{pde_file} must contain 'mode_indices'.")
 
@@ -220,13 +218,26 @@ def load_pde_payload(pde_file: Path, latent_file_override: Path | None) -> PDEPa
             term_descriptions = [str(item) for item in data["rhs_description"]]
         elif "library_description" in data:
             term_descriptions = [str(item) for item in data["library_description"]]
+        elif "library_labels" in data:
+            term_descriptions = [str(item) for item in data["library_labels"]]
         else:
-            raise KeyError(f"{pde_file} must contain 'rhs_description' or 'library_description'.")
+            raise KeyError(f"{pde_file} must contain 'rhs_description', 'library_description', or 'library_labels'.")
 
-        coefficients = np.asarray(data["coefficients_real"], dtype=np.float64) + 1j * np.asarray(
-            data["coefficients_imag"], dtype=np.float64
-        )
-        system_mode = str(np.asarray(data["system_mode"]).item()) if "system_mode" in data else "compact"
+        if "coefficients_real" in data and "coefficients_imag" in data:
+            coefficients = np.asarray(data["coefficients_real"], dtype=np.float64) + 1j * np.asarray(
+                data["coefficients_imag"], dtype=np.float64
+            )
+        elif "coefficients" in data:
+            coefficients = np.asarray(data["coefficients"], dtype=np.float64).astype(np.complex128)
+        else:
+            raise KeyError(f"{pde_file} must contain coefficient arrays.")
+
+        if "system_mode" in data:
+            system_mode = str(np.asarray(data["system_mode"]).item())
+        elif "system" in data:
+            system_mode = str(np.asarray(data["system"]).item())
+        else:
+            system_mode = "compact"
         used_electric_field = bool(np.asarray(data["used_electric_field"]).item()) if "used_electric_field" in data else False
         t = np.asarray(data["t"], dtype=np.float64)
         x = np.asarray(data["x"], dtype=np.float64)
@@ -260,37 +271,105 @@ def infer_output_dir(args: argparse.Namespace) -> Path:
     return (args.pde_file.resolve().parent / f"{args.pde_file.stem}_rk45_eval").resolve()
 
 
-def parse_term_description(description: str) -> TermSpec:
-    if description == "":
-        return TermSpec(raw=description, polynomial_factors=tuple(), derivative_factor=None)
+def normalize_factor_name(name: str) -> str:
+    if name.startswith("z_") and name[2:].isdigit():
+        return f"z{name[2:]}"
+    return name
 
+
+def parse_single_factor_token(token: str) -> FactorSpec:
+    token = token.strip()
+    if not token:
+        raise ValueError("Empty factor token.")
+
+    match = FACTOR_WITH_POWER_PATTERN.fullmatch(token)
+    if match is None:
+        raise ValueError(f"Could not parse factor token: {token!r}")
+    base_token = match.group(1)
+    power = int(match.group(2) or "1")
+
+    reciprocal = False
+    if base_token.startswith("inv_"):
+        reciprocal = True
+        base_token = base_token[4:]
+
+    derivative_order = 0
+    brace_match = BRACE_DERIV_PATTERN.fullmatch(base_token)
+    underscore_match = UNDERSCORE_DERIV_PATTERN.fullmatch(base_token)
+    plain_match = PLAIN_FACTOR_PATTERN.fullmatch(base_token)
+
+    if brace_match is not None:
+        name = normalize_factor_name(brace_match.group(1))
+        derivative_order = len(brace_match.group(2))
+    elif underscore_match is not None:
+        name = normalize_factor_name(underscore_match.group(1))
+        derivative_order = len(underscore_match.group(2))
+    elif plain_match is not None:
+        name = normalize_factor_name(plain_match.group(1))
+    else:
+        raise ValueError(f"Could not parse factor token: {token!r}")
+
+    return FactorSpec(
+        name=name,
+        power=power,
+        derivative_order=derivative_order,
+        reciprocal=reciprocal,
+    )
+
+
+def parse_old_style_term(description: str) -> TermSpec:
     derivative_factor = None
     polynomial_part = description
     derivative_match = DERIV_PATTERN.search(description)
     if derivative_match is not None:
-        derivative_factor = DerivativeFactor(
-            name=derivative_match.group(1).split("_{", 1)[0],
-            order=len(derivative_match.group(2)),
+        derivative_factor = FactorSpec(
+            name=normalize_factor_name(derivative_match.group(1).split("_{", 1)[0]),
+            power=1,
+            derivative_order=len(derivative_match.group(2)),
         )
         polynomial_part = description[: derivative_match.start()]
 
-    factors: list[PolynomialFactor] = []
+    factors: list[FactorSpec] = []
     cursor = 0
     while cursor < len(polynomial_part):
         match = TOKEN_PATTERN.match(polynomial_part, cursor)
         if match is None:
             raise ValueError(f"Could not parse PDE term description: {description!r}")
-        factors.append(PolynomialFactor(name=match.group(1), power=int(match.group(2) or "1")))
+        factors.append(
+            FactorSpec(
+                name=normalize_factor_name(match.group(1)),
+                power=int(match.group(2) or "1"),
+            )
+        )
         cursor = match.end()
 
-    return TermSpec(raw=description, polynomial_factors=tuple(factors), derivative_factor=derivative_factor)
+    if derivative_factor is not None:
+        factors.append(derivative_factor)
+    return TermSpec(raw=description, factors=tuple(factors))
+
+
+def parse_term_description(description: str) -> TermSpec:
+    normalized = description.strip()
+    if normalized in {"", "1"}:
+        return TermSpec(raw=description, factors=tuple())
+
+    if " " in normalized:
+        return TermSpec(
+            raw=description,
+            factors=tuple(parse_single_factor_token(token) for token in normalized.split() if token),
+        )
+
+    try:
+        return TermSpec(raw=description, factors=(parse_single_factor_token(normalized),))
+    except ValueError:
+        return parse_old_style_term(normalized)
 
 
 def max_derivative_order(term_specs: Sequence[TermSpec]) -> int:
     max_order = 0
     for spec in term_specs:
-        if spec.derivative_factor is not None:
-            max_order = max(max_order, spec.derivative_factor.order)
+        for factor in spec.factors:
+            max_order = max(max_order, factor.derivative_order)
     return max_order
 
 
@@ -422,7 +501,7 @@ class LatentPDERHS:
         self.max_order = max_derivative_order(term_specs)
         self.coefficients = np.asarray(payload.coefficients, dtype=np.complex128)
 
-        explicit_mode_names = any(re.search(r"(?:^|[^a-zA-Z0-9_])z\d+", term.raw) for term in term_specs)
+        explicit_mode_names = any(re.search(r"(?:^|[^a-zA-Z0-9_])z\d+|z_\d+", term.raw) for term in term_specs)
         self.generic_single_mode = payload.system_mode == "independent" or not explicit_mode_names
 
     def _evaluate_common_terms(self, state_vars: Dict[str, np.ndarray]) -> np.ndarray:
@@ -448,10 +527,17 @@ class LatentPDERHS:
         ones = np.ones(self.n_x, dtype=np.complex128)
         for term_index, spec in enumerate(self.term_specs):
             value = ones.copy()
-            for factor in spec.polynomial_factors:
-                value *= np.power(base_fields[factor.name], factor.power)
-            if spec.derivative_factor is not None:
-                value *= derivative_lookup[(spec.derivative_factor.name, spec.derivative_factor.order)]
+            for factor in spec.factors:
+                source = (
+                    derivative_lookup[(factor.name, factor.derivative_order)]
+                    if factor.derivative_order > 0
+                    else base_fields[factor.name]
+                )
+                if factor.reciprocal:
+                    safe_sign = np.where(source < 0.0, -1.0, 1.0)
+                    safe = np.where(np.abs(source) >= 1e-10, source, safe_sign * 1e-10)
+                    source = 1.0 / safe
+                value *= np.power(source, factor.power)
             features[term_index] = value
         return features
 
@@ -579,6 +665,12 @@ def mse_per_time(prediction: np.ndarray, truth: np.ndarray) -> np.ndarray:
     return np.mean(diff**2, axis=(1, 2))
 
 
+def electric_energy_per_time(f_t_x_v: np.ndarray, x: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    _n_t_x, _rho_t_x, e_t_x = reconstruct_electric_field(f_t_x_v, x, v)
+    energy = 0.5 * np.trapezoid(np.asarray(e_t_x, dtype=np.float64) ** 2, np.asarray(x, dtype=np.float64), axis=1)
+    return energy.astype(np.float64), np.asarray(e_t_x, dtype=np.float64)
+
+
 def make_animation(
     t: np.ndarray,
     x: np.ndarray,
@@ -685,6 +777,61 @@ def save_error_plot(
     ax.set_title("Error Against Vlasov Truth")
     ax.legend()
     ax.grid(True, alpha=0.3)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+
+def save_electric_energy_plot(
+    t: np.ndarray,
+    truth_energy: np.ndarray,
+    solver_energy: np.ndarray,
+    ae_energy: np.ndarray,
+    solver_name: str,
+    output_path: Path,
+) -> None:
+    truth_energy = np.asarray(truth_energy, dtype=np.float64)
+    solver_energy = np.asarray(solver_energy, dtype=np.float64)
+    ae_energy = np.asarray(ae_energy, dtype=np.float64)
+    eps = 1e-12
+
+    def normalize(series: np.ndarray) -> np.ndarray:
+        base = float(series[0]) if series.size > 0 else 1.0
+        if abs(base) < eps:
+            base = 1.0
+        return series / base
+
+    solver_rel_error = np.abs(solver_energy - truth_energy) / np.maximum(np.abs(truth_energy), eps)
+    ae_rel_error = np.abs(ae_energy - truth_energy) / np.maximum(np.abs(truth_energy), eps)
+
+    fig, axes = plt.subplots(3, 1, figsize=(8, 10), constrained_layout=True, sharex=True)
+    ax_abs, ax_norm, ax_err = axes
+
+    ax_abs.plot(t, truth_energy, label="truth", lw=2)
+    ax_abs.plot(t, solver_energy, label=f"decoded {solver_name}", lw=2)
+    ax_abs.plot(t, ae_energy, label="decoded latent truth", lw=2)
+    ax_abs.set_ylabel(r"$\int E^2/2\,dx$")
+    ax_abs.set_title("Electric-Field Energy")
+    ax_abs.set_yscale("log")
+    ax_abs.legend()
+    ax_abs.grid(True, alpha=0.3, which="both")
+
+    ax_norm.plot(t, normalize(truth_energy), label="truth / truth(0)", lw=2)
+    ax_norm.plot(t, normalize(solver_energy), label=f"{solver_name} / {solver_name}(0)", lw=2)
+    ax_norm.plot(t, normalize(ae_energy), label="AE / AE(0)", lw=2)
+    ax_norm.set_ylabel("Normalized Energy")
+    ax_norm.set_yscale("log")
+    ax_norm.legend()
+    ax_norm.grid(True, alpha=0.3, which="both")
+
+    ax_err.plot(t, solver_rel_error, label=f"{solver_name} relative error", lw=2)
+    ax_err.plot(t, ae_rel_error, label="AE relative error", lw=2)
+    ax_err.set_xlabel("t")
+    ax_err.set_ylabel("Relative Error")
+    ax_err.set_yscale("log")
+    ax_err.legend()
+    ax_err.grid(True, alpha=0.3, which="both")
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, dpi=150)
     plt.close(fig)
@@ -886,6 +1033,9 @@ def main() -> None:
     ae_rel_l2 = relative_l2_per_time(f_latent_truth, f_true)
     rk45_mse = mse_per_time(f_pred, f_true)
     ae_mse = mse_per_time(f_latent_truth, f_true)
+    truth_electric_energy, truth_electric_field = electric_energy_per_time(f_true, x_true, v_true)
+    rk45_electric_energy, rk45_electric_field = electric_energy_per_time(f_pred, x_true, v_true)
+    ae_electric_energy, ae_electric_field = electric_energy_per_time(f_latent_truth, x_true, v_true)
 
     np.savez_compressed(
         output_dir / "rk45_evaluation.npz",
@@ -900,10 +1050,16 @@ def main() -> None:
         rk45_decoded=f_pred.astype(np.float32),
         decoded_latent_truth=f_latent_truth.astype(np.float32),
         truth=f_true.astype(np.float32),
+        truth_electric=truth_electric_field.astype(np.float32),
+        rk45_electric=rk45_electric_field.astype(np.float32),
+        decoded_latent_truth_electric=ae_electric_field.astype(np.float32),
         rk45_relative_l2=rk45_rel_l2.astype(np.float64),
         ae_relative_l2=ae_rel_l2.astype(np.float64),
         rk45_mse=rk45_mse.astype(np.float64),
         ae_mse=ae_mse.astype(np.float64),
+        truth_electric_energy=truth_electric_energy.astype(np.float64),
+        rk45_electric_energy=rk45_electric_energy.astype(np.float64),
+        ae_electric_energy=ae_electric_energy.astype(np.float64),
         fill_unmodeled=np.asarray(args.fill_unmodeled),
         solver=np.asarray(args.solver),
         rk4_substeps=np.asarray(args.rk4_substeps, dtype=np.int32),
@@ -913,6 +1069,14 @@ def main() -> None:
     )
 
     save_error_plot(t_true, rk45_rel_l2, ae_rel_l2, args.solver, output_dir / "error_over_time.png")
+    save_electric_energy_plot(
+        t=t_true,
+        truth_energy=truth_electric_energy,
+        solver_energy=rk45_electric_energy,
+        ae_energy=ae_electric_energy,
+        solver_name=args.solver,
+        output_path=output_dir / "electric_energy_over_time.png",
+    )
     if not args.no_animation:
         make_animation(
             t=t_true,
@@ -952,6 +1116,7 @@ def main() -> None:
 
     print(f"Saved evaluation arrays to: {output_dir / 'rk45_evaluation.npz'}")
     print(f"Saved error plot to: {output_dir / 'error_over_time.png'}")
+    print(f"Saved electric-energy plot to: {output_dir / 'electric_energy_over_time.png'}")
     if not args.no_animation:
         print(f"Saved animation to: {output_dir / 'rk45_vs_truth.gif'}")
     print(f"Final {args.solver} decoded relative L2 error: {rk45_rel_l2[-1]:.6e}")

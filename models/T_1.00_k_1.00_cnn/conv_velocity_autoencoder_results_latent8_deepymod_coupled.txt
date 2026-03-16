@@ -1,0 +1,448 @@
+DeepMoD latent dynamics discovery
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8_deepymod_coupled.npz
+system: coupled
+network: tanh
+hidden_layers: 64,64,64
+poly_order: 2
+diff_order: 2
+sparse_estimator: stlsq
+constraint: least-squares
+device: cuda
+sampled_nt: 1001
+sampled_nx: 128
+sampled_dt: 5.000000e-03
+sampled_dx: 4.908739e-02
+case_name: T_1.00_k_1.00
+case_dir: vlasov_twostream_param_grid/T_1.00_k_1.00
+
+Library terms:
+  00: 1
+  01: z_0
+  02: z_0_x
+  03: z_0_xx
+  04: z_1
+  05: z_1_x
+  06: z_1_xx
+  07: z_2
+  08: z_2_x
+  09: z_2_xx
+  10: z_3
+  11: z_3_x
+  12: z_3_xx
+  13: z_4
+  14: z_4_x
+  15: z_4_xx
+  16: z_5
+  17: z_5_x
+  18: z_5_xx
+  19: z_6
+  20: z_6_x
+  21: z_6_xx
+  22: z_7
+  23: z_7_x
+  24: z_7_xx
+  25: z_0 z_0
+  26: z_0 z_0_x
+  27: z_0 z_0_xx
+  28: z_0 z_1
+  29: z_0 z_1_x
+  30: z_0 z_1_xx
+  31: z_0 z_2
+  32: z_0 z_2_x
+  33: z_0 z_2_xx
+  34: z_0 z_3
+  35: z_0 z_3_x
+  36: z_0 z_3_xx
+  37: z_0 z_4
+  38: z_0 z_4_x
+  39: z_0 z_4_xx
+  40: z_0 z_5
+  41: z_0 z_5_x
+  42: z_0 z_5_xx
+  43: z_0 z_6
+  44: z_0 z_6_x
+  45: z_0 z_6_xx
+  46: z_0 z_7
+  47: z_0 z_7_x
+  48: z_0 z_7_xx
+  49: z_0_x z_0_x
+  50: z_0_x z_0_xx
+  51: z_0_x z_1
+  52: z_0_x z_1_x
+  53: z_0_x z_1_xx
+  54: z_0_x z_2
+  55: z_0_x z_2_x
+  56: z_0_x z_2_xx
+  57: z_0_x z_3
+  58: z_0_x z_3_x
+  59: z_0_x z_3_xx
+  60: z_0_x z_4
+  61: z_0_x z_4_x
+  62: z_0_x z_4_xx
+  63: z_0_x z_5
+  64: z_0_x z_5_x
+  65: z_0_x z_5_xx
+  66: z_0_x z_6
+  67: z_0_x z_6_x
+  68: z_0_x z_6_xx
+  69: z_0_x z_7
+  70: z_0_x z_7_x
+  71: z_0_x z_7_xx
+  72: z_0_xx z_0_xx
+  73: z_0_xx z_1
+  74: z_0_xx z_1_x
+  75: z_0_xx z_1_xx
+  76: z_0_xx z_2
+  77: z_0_xx z_2_x
+  78: z_0_xx z_2_xx
+  79: z_0_xx z_3
+  80: z_0_xx z_3_x
+  81: z_0_xx z_3_xx
+  82: z_0_xx z_4
+  83: z_0_xx z_4_x
+  84: z_0_xx z_4_xx
+  85: z_0_xx z_5
+  86: z_0_xx z_5_x
+  87: z_0_xx z_5_xx
+  88: z_0_xx z_6
+  89: z_0_xx z_6_x
+  90: z_0_xx z_6_xx
+  91: z_0_xx z_7
+  92: z_0_xx z_7_x
+  93: z_0_xx z_7_xx
+  94: z_1 z_1
+  95: z_1 z_1_x
+  96: z_1 z_1_xx
+  97: z_1 z_2
+  98: z_1 z_2_x
+  99: z_1 z_2_xx
+  100: z_1 z_3
+  101: z_1 z_3_x
+  102: z_1 z_3_xx
+  103: z_1 z_4
+  104: z_1 z_4_x
+  105: z_1 z_4_xx
+  106: z_1 z_5
+  107: z_1 z_5_x
+  108: z_1 z_5_xx
+  109: z_1 z_6
+  110: z_1 z_6_x
+  111: z_1 z_6_xx
+  112: z_1 z_7
+  113: z_1 z_7_x
+  114: z_1 z_7_xx
+  115: z_1_x z_1_x
+  116: z_1_x z_1_xx
+  117: z_1_x z_2
+  118: z_1_x z_2_x
+  119: z_1_x z_2_xx
+  120: z_1_x z_3
+  121: z_1_x z_3_x
+  122: z_1_x z_3_xx
+  123: z_1_x z_4
+  124: z_1_x z_4_x
+  125: z_1_x z_4_xx
+  126: z_1_x z_5
+  127: z_1_x z_5_x
+  128: z_1_x z_5_xx
+  129: z_1_x z_6
+  130: z_1_x z_6_x
+  131: z_1_x z_6_xx
+  132: z_1_x z_7
+  133: z_1_x z_7_x
+  134: z_1_x z_7_xx
+  135: z_1_xx z_1_xx
+  136: z_1_xx z_2
+  137: z_1_xx z_2_x
+  138: z_1_xx z_2_xx
+  139: z_1_xx z_3
+  140: z_1_xx z_3_x
+  141: z_1_xx z_3_xx
+  142: z_1_xx z_4
+  143: z_1_xx z_4_x
+  144: z_1_xx z_4_xx
+  145: z_1_xx z_5
+  146: z_1_xx z_5_x
+  147: z_1_xx z_5_xx
+  148: z_1_xx z_6
+  149: z_1_xx z_6_x
+  150: z_1_xx z_6_xx
+  151: z_1_xx z_7
+  152: z_1_xx z_7_x
+  153: z_1_xx z_7_xx
+  154: z_2 z_2
+  155: z_2 z_2_x
+  156: z_2 z_2_xx
+  157: z_2 z_3
+  158: z_2 z_3_x
+  159: z_2 z_3_xx
+  160: z_2 z_4
+  161: z_2 z_4_x
+  162: z_2 z_4_xx
+  163: z_2 z_5
+  164: z_2 z_5_x
+  165: z_2 z_5_xx
+  166: z_2 z_6
+  167: z_2 z_6_x
+  168: z_2 z_6_xx
+  169: z_2 z_7
+  170: z_2 z_7_x
+  171: z_2 z_7_xx
+  172: z_2_x z_2_x
+  173: z_2_x z_2_xx
+  174: z_2_x z_3
+  175: z_2_x z_3_x
+  176: z_2_x z_3_xx
+  177: z_2_x z_4
+  178: z_2_x z_4_x
+  179: z_2_x z_4_xx
+  180: z_2_x z_5
+  181: z_2_x z_5_x
+  182: z_2_x z_5_xx
+  183: z_2_x z_6
+  184: z_2_x z_6_x
+  185: z_2_x z_6_xx
+  186: z_2_x z_7
+  187: z_2_x z_7_x
+  188: z_2_x z_7_xx
+  189: z_2_xx z_2_xx
+  190: z_2_xx z_3
+  191: z_2_xx z_3_x
+  192: z_2_xx z_3_xx
+  193: z_2_xx z_4
+  194: z_2_xx z_4_x
+  195: z_2_xx z_4_xx
+  196: z_2_xx z_5
+  197: z_2_xx z_5_x
+  198: z_2_xx z_5_xx
+  199: z_2_xx z_6
+  200: z_2_xx z_6_x
+  201: z_2_xx z_6_xx
+  202: z_2_xx z_7
+  203: z_2_xx z_7_x
+  204: z_2_xx z_7_xx
+  205: z_3 z_3
+  206: z_3 z_3_x
+  207: z_3 z_3_xx
+  208: z_3 z_4
+  209: z_3 z_4_x
+  210: z_3 z_4_xx
+  211: z_3 z_5
+  212: z_3 z_5_x
+  213: z_3 z_5_xx
+  214: z_3 z_6
+  215: z_3 z_6_x
+  216: z_3 z_6_xx
+  217: z_3 z_7
+  218: z_3 z_7_x
+  219: z_3 z_7_xx
+  220: z_3_x z_3_x
+  221: z_3_x z_3_xx
+  222: z_3_x z_4
+  223: z_3_x z_4_x
+  224: z_3_x z_4_xx
+  225: z_3_x z_5
+  226: z_3_x z_5_x
+  227: z_3_x z_5_xx
+  228: z_3_x z_6
+  229: z_3_x z_6_x
+  230: z_3_x z_6_xx
+  231: z_3_x z_7
+  232: z_3_x z_7_x
+  233: z_3_x z_7_xx
+  234: z_3_xx z_3_xx
+  235: z_3_xx z_4
+  236: z_3_xx z_4_x
+  237: z_3_xx z_4_xx
+  238: z_3_xx z_5
+  239: z_3_xx z_5_x
+  240: z_3_xx z_5_xx
+  241: z_3_xx z_6
+  242: z_3_xx z_6_x
+  243: z_3_xx z_6_xx
+  244: z_3_xx z_7
+  245: z_3_xx z_7_x
+  246: z_3_xx z_7_xx
+  247: z_4 z_4
+  248: z_4 z_4_x
+  249: z_4 z_4_xx
+  250: z_4 z_5
+  251: z_4 z_5_x
+  252: z_4 z_5_xx
+  253: z_4 z_6
+  254: z_4 z_6_x
+  255: z_4 z_6_xx
+  256: z_4 z_7
+  257: z_4 z_7_x
+  258: z_4 z_7_xx
+  259: z_4_x z_4_x
+  260: z_4_x z_4_xx
+  261: z_4_x z_5
+  262: z_4_x z_5_x
+  263: z_4_x z_5_xx
+  264: z_4_x z_6
+  265: z_4_x z_6_x
+  266: z_4_x z_6_xx
+  267: z_4_x z_7
+  268: z_4_x z_7_x
+  269: z_4_x z_7_xx
+  270: z_4_xx z_4_xx
+  271: z_4_xx z_5
+  272: z_4_xx z_5_x
+  273: z_4_xx z_5_xx
+  274: z_4_xx z_6
+  275: z_4_xx z_6_x
+  276: z_4_xx z_6_xx
+  277: z_4_xx z_7
+  278: z_4_xx z_7_x
+  279: z_4_xx z_7_xx
+  280: z_5 z_5
+  281: z_5 z_5_x
+  282: z_5 z_5_xx
+  283: z_5 z_6
+  284: z_5 z_6_x
+  285: z_5 z_6_xx
+  286: z_5 z_7
+  287: z_5 z_7_x
+  288: z_5 z_7_xx
+  289: z_5_x z_5_x
+  290: z_5_x z_5_xx
+  291: z_5_x z_6
+  292: z_5_x z_6_x
+  293: z_5_x z_6_xx
+  294: z_5_x z_7
+  295: z_5_x z_7_x
+  296: z_5_x z_7_xx
+  297: z_5_xx z_5_xx
+  298: z_5_xx z_6
+  299: z_5_xx z_6_x
+  300: z_5_xx z_6_xx
+  301: z_5_xx z_7
+  302: z_5_xx z_7_x
+  303: z_5_xx z_7_xx
+  304: z_6 z_6
+  305: z_6 z_6_x
+  306: z_6 z_6_xx
+  307: z_6 z_7
+  308: z_6 z_7_x
+  309: z_6 z_7_xx
+  310: z_6_x z_6_x
+  311: z_6_x z_6_xx
+  312: z_6_x z_7
+  313: z_6_x z_7_x
+  314: z_6_x z_7_xx
+  315: z_6_xx z_6_xx
+  316: z_6_xx z_7
+  317: z_6_xx z_7_x
+  318: z_6_xx z_7_xx
+  319: z_7 z_7
+  320: z_7 z_7_x
+  321: z_7 z_7_xx
+  322: z_7_x z_7_x
+  323: z_7_x z_7_xx
+  324: z_7_xx z_7_xx
+
+Mode 0
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 1.610198e-01
+  full_fit_mse: 1.602803e-01
+  residual_l2: 4.398700e+01
+  ut_l2: 9.158150e+01
+  relative_residual_l2: 4.803044e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 2
+  equation: z_0_t = -6.762231e-01*z_1 z_4 -3.341913e-01*z_1 z_6
+
+Mode 1
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 9.923727e-02
+  full_fit_mse: 1.004960e-01
+  residual_l2: 4.438723e+02
+  ut_l2: 4.724650e+02
+  relative_residual_l2: 9.394819e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 1
+  equation: z_1_t = -9.978034e-01*z_3_x z_7_xx
+
+Mode 2
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 3.103330e-01
+  full_fit_mse: 3.085812e-01
+  residual_l2: 2.495944e+01
+  ut_l2: 1.178189e+02
+  relative_residual_l2: 2.118458e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 3
+  equation: z_2_t = +4.067439e-01*z_0 z_4 +4.907196e-01*z_2 z_4 -1.692733e-01*z_4 z_5
+
+Mode 3
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 1.785114e-01
+  full_fit_mse: 1.788960e-01
+  residual_l2: 1.027432e+02
+  ut_l2: 1.398965e+02
+  relative_residual_l2: 7.344227e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 7
+  equation: z_3_t = -2.607423e-01*z_1 +6.555264e-01*z_0 z_1 -6.569183e-01*z_1 z_7 -6.112325e-01*z_2_x z_4_x -2.896092e-01*z_4 z_4_x +2.910169e-01*z_4 z_6 +2.698526e-01*z_6 z_6_x
+
+Mode 4
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 4.770921e-01
+  full_fit_mse: 4.695808e-01
+  residual_l2: 1.585616e+02
+  ut_l2: 8.654783e+01
+  relative_residual_l2: 1.832069e+00
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 4
+  equation: z_4_t = -4.077931e-01*z_4 z_6 -5.203646e-01*z_5 z_5_xx +6.102550e-01*z_5_x z_5_x +1.007386e-01*z_5_xx z_5_xx
+
+Mode 5
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 1.077070e-01
+  full_fit_mse: 1.085976e-01
+  residual_l2: 8.101824e+01
+  ut_l2: 1.845381e+02
+  relative_residual_l2: 4.390326e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 4
+  equation: z_5_t = -3.313427e-01*z_1 +6.717041e-01*z_0 z_1 -7.665921e-01*z_1 z_7 +4.176339e-01*z_4 z_5_xx
+
+Mode 6
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 3.768603e-01
+  full_fit_mse: 3.699286e-01
+  residual_l2: 7.473859e+01
+  ut_l2: 1.248722e+02
+  relative_residual_l2: 5.985205e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 1
+  equation: z_6_t = +9.792356e-01*z_4 z_4
+
+Mode 7
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 2.431040e-01
+  full_fit_mse: 2.439428e-01
+  residual_l2: 3.500048e+01
+  ut_l2: 8.028622e+01
+  relative_residual_l2: 4.359463e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 4
+  equation: z_7_t = -4.523275e-01*z_4 +9.030795e-02*z_0 z_4 -2.269103e-01*z_1 z_3_x +3.801195e-01*z_2 z_4

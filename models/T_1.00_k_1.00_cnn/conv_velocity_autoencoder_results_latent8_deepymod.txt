@@ -1,0 +1,128 @@
+DeepMoD latent dynamics discovery
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/conv_velocity_autoencoder_results_latent8_deepymod.npz
+network: tanh
+hidden_layers: 64,64,64
+poly_order: 2
+diff_order: 1
+sparse_estimator: stlsq
+constraint: least-squares
+device: cuda
+sampled_nt: 1001
+sampled_nx: 128
+sampled_dt: 5.000000e-03
+sampled_dx: 4.908739e-02
+case_name: T_1.00_k_1.00
+case_dir: vlasov_twostream_param_grid/T_1.00_k_1.00
+
+Library terms:
+  00: 1
+  01: z_x
+  02: z
+  03: z z_x
+  04: z^2
+  05: z^2 z_x
+
+Mode 0
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_00
+  sample_fit_mse: 1.445391e-01
+  full_fit_mse: 1.437257e-01
+  residual_l2: 1.635969e+02
+  ut_l2: 7.708475e+01
+  relative_residual_l2: 2.122299e+00
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 3
+  equation: z_0_t = +1.255105e+00*1 +4.169679e-01*z_x -5.288103e-01*z^2
+
+Mode 1
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_01
+  sample_fit_mse: 4.416021e-01
+  full_fit_mse: 4.426721e-01
+  residual_l2: 3.150214e+02
+  ut_l2: 3.776123e+02
+  relative_residual_l2: 8.342454e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 1
+  equation: z_1_t = +9.994618e-01*z_x
+
+Mode 2
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_02
+  sample_fit_mse: 3.789987e-01
+  full_fit_mse: 3.782797e-01
+  residual_l2: 1.165196e+02
+  ut_l2: 1.055555e+02
+  relative_residual_l2: 1.103871e+00
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 3
+  equation: z_2_t = +1.998651e-01*1 -1.116616e+00*z -3.632120e-01*z^2
+
+Mode 3
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_03
+  sample_fit_mse: 2.578627e-01
+  full_fit_mse: 2.547177e-01
+  residual_l2: 8.196059e+01
+  ut_l2: 4.317151e+01
+  relative_residual_l2: 1.898488e+00
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 5
+  equation: z_3_t = +1.177866e+00*1 -6.675863e-01*z_x +1.843572e-01*z -4.282495e-01*z z_x -4.628839e-01*z^2
+
+Mode 4
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_04
+  sample_fit_mse: 3.597200e-01
+  full_fit_mse: 3.577341e-01
+  residual_l2: 2.450896e+02
+  ut_l2: 3.113482e+02
+  relative_residual_l2: 7.871882e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 1
+  equation: z_4_t = -9.992202e-01*z_x
+
+Mode 5
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_05
+  sample_fit_mse: 1.781846e-01
+  full_fit_mse: 1.806384e-01
+  residual_l2: 6.336689e+01
+  ut_l2: 7.150265e+01
+  relative_residual_l2: 8.862174e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 4
+  equation: z_5_t = -1.253491e+00*1 -3.777506e-01*z_x +4.775036e-01*z +3.258084e-01*z^2
+
+Mode 6
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_06
+  sample_fit_mse: 3.813036e-01
+  full_fit_mse: 3.834861e-01
+  residual_l2: 1.672938e+02
+  ut_l2: 1.401366e+02
+  relative_residual_l2: 1.193791e+00
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 3
+  equation: z_6_t = +1.176222e+00*1 +1.277116e+00*z +6.813124e-01*z^2
+
+Mode 7
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/models/T_1.00_k_1.00_cnn/deepymod_logs/mode_07
+  sample_fit_mse: 2.425513e-01
+  full_fit_mse: 2.432757e-01
+  residual_l2: 5.831833e+01
+  ut_l2: 8.365475e+01
+  relative_residual_l2: 6.971312e-01
+  selected_points: 128128
+  train_points: 102502
+  test_points: 25626
+  nonzero_terms: 2
+  equation: z_7_t = +5.878760e-01*1 +4.643739e-01*z^2
