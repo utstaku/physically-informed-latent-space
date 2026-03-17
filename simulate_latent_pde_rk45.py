@@ -28,6 +28,7 @@ except ImportError as exc:
 
 from Conv_velocity_AE import ConvVelocityAutoencoder
 from latent_dynamics import load_latent_data, resolve_electric_data
+from latent_dynamics_pdenet import LatentPDEModel, rollout_latent_dynamics as rollout_pdenet_latent_dynamics
 from reconstruct_e_field import load_distribution as load_case_distribution
 from reconstruct_e_field import reconstruct_electric_field
 
@@ -68,6 +69,7 @@ class PDEPayload:
     space_diff: str
     system_mode: str
     used_electric_field: bool
+    model_family: str
 
 
 @dataclass
@@ -83,7 +85,7 @@ class IntegrationResult:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Integrate a learned latent PDE with RK45, decode it back to f(x, v, t), "
+            "Roll out a learned latent dynamics model, decode it back to f(x, v, t), "
             "and compare it against the Vlasov ground truth."
         )
     )
@@ -91,7 +93,10 @@ def parse_args() -> argparse.Namespace:
         "--pde-file",
         type=Path,
         required=True,
-        help="Path to latent_pde_find*.npz or latent_compact_pde_find*.npz.",
+        help=(
+            "Path to a learned latent dynamics .npz file, for example *_pde_find.npz, "
+            "*_compact_pde_find.npz, *_deepymod*.npz, *_linear_transport.npz, or *_pdenet.npz."
+        ),
     )
     parser.add_argument(
         "--latent-file",
@@ -208,6 +213,8 @@ def load_pde_payload(pde_file: Path, latent_file_override: Path | None) -> PDEPa
         if "mode_indices" not in data:
             raise KeyError(f"{pde_file} must contain 'mode_indices'.")
 
+        model_family = str(np.asarray(data["model_family"]).item()) if "model_family" in data else "symbolic"
+
         latent_path = (
             latent_file_override.resolve()
             if latent_file_override is not None
@@ -231,6 +238,9 @@ def load_pde_payload(pde_file: Path, latent_file_override: Path | None) -> PDEPa
             coefficients = np.asarray(data["coefficients"], dtype=np.float64).astype(np.complex128)
         else:
             raise KeyError(f"{pde_file} must contain coefficient arrays.")
+
+        if model_family == "pdenet" and coefficients.ndim == 2:
+            coefficients = coefficients.T
 
         if "system_mode" in data:
             system_mode = str(np.asarray(data["system_mode"]).item())
@@ -262,6 +272,7 @@ def load_pde_payload(pde_file: Path, latent_file_override: Path | None) -> PDEPa
         space_diff=space_diff,
         system_mode=system_mode,
         used_electric_field=used_electric_field,
+        model_family=model_family,
     )
 
 
@@ -594,6 +605,7 @@ def load_autoencoder_from_latent_file(latent_file: Path, device: torch.device) -
         latent_dim = int(np.asarray(data["nz"]).item())
         conv_channels = tuple(int(item) for item in np.asarray(data["conv_channels"], dtype=np.int32))
         kernel_size = int(np.asarray(data["kernel_size"]).item())
+        padding_mode = str(np.asarray(data["padding_mode"]).item()) if "padding_mode" in data else "zeros"
         feature_mean = np.asarray(data["feature_mean"], dtype=np.float32)
         feature_std = np.asarray(data["feature_std"], dtype=np.float32)
 
@@ -609,6 +621,7 @@ def load_autoencoder_from_latent_file(latent_file: Path, device: torch.device) -
         latent_dim=latent_dim,
         conv_channels=conv_channels,
         kernel_size=kernel_size,
+        padding_mode=padding_mode,
     ).to(device)
     model.load_state_dict(state_dict, strict=True)
     model.eval()
@@ -725,7 +738,7 @@ def make_animation(
         cmap="magma",
     )
     ax_truth.set_title("Vlasov Truth")
-    ax_pred.set_title("Decoded RK45 Prediction")
+    ax_pred.set_title(f"Decoded {solver_name} Prediction")
     ax_err.set_title("Absolute Error")
     for axis in (ax_truth, ax_pred, ax_err):
         axis.set_xlabel("x")
@@ -907,6 +920,103 @@ def integrate_with_rk4(
     )
 
 
+def resolve_evaluation_steps(
+    payload: PDEPayload,
+    latent_t: np.ndarray,
+    latent_x: np.ndarray,
+    t_true: np.ndarray,
+    x_true: np.ndarray,
+    requested_t_end: float | None,
+) -> int:
+    if payload.t.ndim != 1 or payload.t.size == 0:
+        raise ValueError(f"{payload.pde_file} must store a non-empty 1D time grid in 't'.")
+    if payload.x.ndim != 1 or payload.x.size == 0:
+        raise ValueError(f"{payload.pde_file} must store a non-empty 1D space grid in 'x'.")
+    if payload.t.size > latent_t.size:
+        raise ValueError(f"{payload.pde_file} stores more time points than the latent trajectory.")
+    if payload.x.shape != latent_x.shape or not np.allclose(payload.x, latent_x, rtol=1e-6, atol=1e-8):
+        raise ValueError(f"{payload.pde_file} x grid does not match the latent/distribution grid.")
+    if not np.allclose(payload.t, latent_t[: payload.t.size], rtol=1e-6, atol=1e-8):
+        raise ValueError(f"{payload.pde_file} time grid does not match the latent trajectory prefix.")
+    if not np.allclose(payload.t, t_true[: payload.t.size], rtol=1e-6, atol=1e-8):
+        raise ValueError(f"{payload.pde_file} time grid does not match distribution_full.npz.")
+    if not np.allclose(payload.x, x_true, rtol=1e-6, atol=1e-8):
+        raise ValueError(f"{payload.pde_file} x grid does not match distribution_full.npz.")
+
+    eval_steps = payload.t.size
+    if requested_t_end is not None:
+        eval_steps = int(np.count_nonzero(payload.t <= requested_t_end + 1e-12))
+        if eval_steps == 0:
+            raise ValueError(f"--t-end={requested_t_end} produced an empty time window.")
+    return eval_steps
+
+
+def rollout_pdenet_prediction(
+    payload: PDEPayload,
+    initial_state_x_m: np.ndarray,
+    t_eval: np.ndarray,
+    device: torch.device,
+    electric_field_t_x: np.ndarray | None,
+) -> np.ndarray:
+    with np.load(payload.pde_file, allow_pickle=False) as data:
+        if "latent_rollout_prediction" in data:
+            stored = np.asarray(data["latent_rollout_prediction"], dtype=np.float64)
+            expected_shape = (payload.t.size, payload.x.size, len(payload.mode_indices))
+            if stored.shape != expected_shape:
+                raise ValueError(
+                    f"Stored latent_rollout_prediction shape mismatch in {payload.pde_file}: "
+                    f"expected {expected_shape}, got {stored.shape}"
+                )
+            return stored[: t_eval.size]
+
+        required = {"diff_order", "poly_order", "kernel_size"}
+        missing = [key for key in required if key not in data]
+        if missing:
+            raise KeyError(
+                f"{payload.pde_file} is missing {missing}, so the PDE-Net rollout cannot be reconstructed."
+            )
+
+        model = LatentPDEModel(
+            mode_indices=payload.mode_indices,
+            dx=payload.dx,
+            diff_order=int(np.asarray(data["diff_order"]).item()),
+            kernel_size=int(np.asarray(data["kernel_size"]).item()),
+            poly_order=int(np.asarray(data["poly_order"]).item()),
+            symnet_hidden_dim=int(np.asarray(data["symnet_hidden_dim"]).item()) if "symnet_hidden_dim" in data else None,
+            symnet_num_layers=int(np.asarray(data["symnet_num_layers"]).item()) if "symnet_num_layers" in data else None,
+            external_feature_names=("E",) if payload.used_electric_field else (),
+        ).to(device)
+
+        with torch.no_grad():
+            state_dict = {}
+            for key in data.files:
+                if key.startswith("param_"):
+                    state_key = key[len("param_") :].replace("__", ".")
+                    state_dict[state_key] = torch.from_numpy(np.asarray(data[key], dtype=np.float32))
+            if not state_dict:
+                raise KeyError(
+                    f"{payload.pde_file} does not contain saved PDE-Net parameters ('param_*')."
+                )
+            model.load_state_dict(state_dict, strict=True)
+
+        rollout_result = rollout_pdenet_latent_dynamics(
+            model=model,
+            initial_state_x_m=np.asarray(initial_state_x_m, dtype=np.float32),
+            t=np.asarray(t_eval, dtype=np.float64),
+            device=device,
+            method="rk4",
+            latent_mean=np.asarray(data["latent_mean_modeled"], dtype=np.float32) if "latent_mean_modeled" in data else None,
+            latent_std=np.asarray(data["latent_std_modeled"], dtype=np.float32) if "latent_std_modeled" in data else None,
+            electric_field_t_x=np.asarray(electric_field_t_x[: t_eval.size], dtype=np.float32) if electric_field_t_x is not None else None,
+            electric_mean=np.asarray(data["electric_mean_modeled"], dtype=np.float32) if "electric_mean_modeled" in data else None,
+            electric_std=np.asarray(data["electric_std_modeled"], dtype=np.float32) if "electric_std_modeled" in data else None,
+            divergence_threshold=float(np.asarray(data["divergence_threshold"]).item()) if "divergence_threshold" in data else None,
+        )
+        if not rollout_result.success:
+            raise ValueError(rollout_result.message)
+        return np.asarray(rollout_result.trajectory, dtype=np.float64)
+
+
 def main() -> None:
     args = parse_args()
     output_dir = infer_output_dir(args)
@@ -926,14 +1036,17 @@ def main() -> None:
         raise ValueError("Latent file time grid does not match distribution_full.npz.")
     if not np.allclose(latent_x, x_true, rtol=1e-6, atol=1e-8):
         raise ValueError("Latent file x grid does not match distribution_full.npz.")
-
-    if args.t_end is not None:
-        selected_mask = t_true <= args.t_end + 1e-12
-        if not np.any(selected_mask):
-            raise ValueError(f"--t-end={args.t_end} produced an empty time window.")
-        latent_true = latent_true[selected_mask]
-        f_true = f_true[selected_mask]
-        t_true = t_true[selected_mask]
+    eval_steps = resolve_evaluation_steps(
+        payload=payload,
+        latent_t=latent_t,
+        latent_x=latent_x,
+        t_true=t_true,
+        x_true=x_true,
+        requested_t_end=args.t_end,
+    )
+    latent_true = latent_true[:eval_steps]
+    f_true = f_true[:eval_steps]
+    t_true = t_true[:eval_steps]
 
     electric_forcing = None
     if payload.used_electric_field:
@@ -949,56 +1062,81 @@ def main() -> None:
             raise ValueError("The PDE file requires E(t, x), but no electric field source could be resolved.")
         electric_forcing = TimeSeriesForcing(latent_t, np.asarray(electric_field, dtype=np.float64))
         print(f"Using electric forcing from: {electric_source}")
+    solver_name = args.solver
+    solver_success = True
+    solver_message = "Used learned latent dynamics rollout."
+    solver_nfev = 0
+    solver_status = 0
 
-    term_specs = [parse_term_description(description) for description in payload.term_descriptions]
-    rhs = LatentPDERHS(payload=payload, term_specs=term_specs, electric_forcing=electric_forcing)
-
-    y0 = latent_true[0, :, payload.mode_indices].T.reshape(-1)
-    if args.solver == "RK4":
-        solution = integrate_with_rk4(
-            rhs=rhs,
+    if payload.model_family == "pdenet":
+        device = torch.device(args.device)
+        latent_modeled = rollout_pdenet_prediction(
+            payload=payload,
+            initial_state_x_m=np.asarray(latent_true[0][:, payload.mode_indices], dtype=np.float64),
             t_eval=t_true,
-            y0=y0,
-            rk4_substeps=args.rk4_substeps,
+            device=device,
+            electric_field_t_x=np.asarray(electric_field, dtype=np.float64) if electric_field is not None else None,
         )
+        valid_steps = latent_modeled.shape[0]
+        solver_name = "PDE-Net"
+        solver_message = "Used stored/reconstructed PDE-Net latent rollout."
     else:
-        scipy_solution = solve_ivp(
-            fun=rhs,
-            t_span=(float(t_true[0]), float(t_true[-1])),
-            y0=y0,
-            method=args.solver,
-            t_eval=t_true,
-            rtol=args.rtol,
-            atol=args.atol,
-            max_step=payload.dt if args.max_step is None else args.max_step,
-            first_step=args.initial_step,
-            vectorized=False,
-        )
-        solution = IntegrationResult(
-            success=bool(scipy_solution.success),
-            t=np.asarray(scipy_solution.t, dtype=np.float64),
-            y=np.asarray(scipy_solution.y, dtype=np.float64),
-            status=int(scipy_solution.status),
-            message=str(scipy_solution.message),
-            nfev=int(scipy_solution.nfev),
-        )
+        term_specs = [parse_term_description(description) for description in payload.term_descriptions]
+        rhs = LatentPDERHS(payload=payload, term_specs=term_specs, electric_forcing=electric_forcing)
 
-    if not solution.success:
-        print(f"{args.solver} stopped early: {solution.message}")
+        # Keep the x-axis in place before selecting modes so the flattened state
+        # matches the (n_modes, n_x) layout expected by LatentPDERHS.__call__.
+        y0 = np.ascontiguousarray(latent_true[0][:, payload.mode_indices].T).reshape(-1)
+        if args.solver == "RK4":
+            solution = integrate_with_rk4(
+                rhs=rhs,
+                t_eval=t_true,
+                y0=y0,
+                rk4_substeps=args.rk4_substeps,
+            )
+        else:
+            scipy_solution = solve_ivp(
+                fun=rhs,
+                t_span=(float(t_true[0]), float(t_true[-1])),
+                y0=y0,
+                method=args.solver,
+                t_eval=t_true,
+                rtol=args.rtol,
+                atol=args.atol,
+                max_step=payload.dt if args.max_step is None else args.max_step,
+                first_step=args.initial_step,
+                vectorized=False,
+            )
+            solution = IntegrationResult(
+                success=bool(scipy_solution.success),
+                t=np.asarray(scipy_solution.t, dtype=np.float64),
+                y=np.asarray(scipy_solution.y, dtype=np.float64),
+                status=int(scipy_solution.status),
+                message=str(scipy_solution.message),
+                nfev=int(scipy_solution.nfev),
+            )
 
-    if solution.t.size == 0:
-        solution_t = np.asarray([t_true[0]], dtype=np.float64)
-        solution_y = y0.reshape(-1, 1)
-    else:
-        solution_t = np.asarray(solution.t, dtype=np.float64)
-        solution_y = np.asarray(solution.y, dtype=np.float64)
+        solver_success = bool(solution.success)
+        solver_message = str(solution.message)
+        solver_nfev = int(solution.nfev)
+        solver_status = int(solution.status)
+        if not solution.success:
+            print(f"{args.solver} stopped early: {solution.message}")
 
-    valid_steps = solution_t.size
+        if solution.t.size == 0:
+            solution_t = np.asarray([t_true[0]], dtype=np.float64)
+            solution_y = y0.reshape(-1, 1)
+        else:
+            solution_t = np.asarray(solution.t, dtype=np.float64)
+            solution_y = np.asarray(solution.y, dtype=np.float64)
+
+        valid_steps = solution_t.size
+        latent_modeled = solution_y.T.reshape(valid_steps, len(payload.mode_indices), len(x_true)).transpose(0, 2, 1)
+
     t_true = t_true[:valid_steps]
     latent_true = latent_true[:valid_steps]
     f_true = f_true[:valid_steps]
 
-    latent_modeled = solution_y.T.reshape(valid_steps, len(payload.mode_indices), len(x_true)).transpose(0, 2, 1)
     latent_pred_full = build_full_latent_prediction(
         latent_true=np.asarray(latent_true, dtype=np.float64),
         latent_pred_modeled=latent_modeled,
@@ -1034,7 +1172,7 @@ def main() -> None:
     rk45_mse = mse_per_time(f_pred, f_true)
     ae_mse = mse_per_time(f_latent_truth, f_true)
     truth_electric_energy, truth_electric_field = electric_energy_per_time(f_true, x_true, v_true)
-    rk45_electric_energy, rk45_electric_field = electric_energy_per_time(f_pred, x_true, v_true)
+    solver_electric_energy, solver_electric_field = electric_energy_per_time(f_pred, x_true, v_true)
     ae_electric_energy, ae_electric_field = electric_energy_per_time(f_latent_truth, x_true, v_true)
 
     np.savez_compressed(
@@ -1045,36 +1183,43 @@ def main() -> None:
         t=t_true.astype(np.float64),
         x=x_true.astype(np.float64),
         v=v_true.astype(np.float64),
+        solver_label=np.asarray(solver_name),
         modeled_modes=np.asarray(payload.mode_indices, dtype=np.int32),
+        solver_latent=latent_pred_full.astype(np.float32),
+        solver_decoded=f_pred.astype(np.float32),
         rk45_latent=latent_pred_full.astype(np.float32),
         rk45_decoded=f_pred.astype(np.float32),
         decoded_latent_truth=f_latent_truth.astype(np.float32),
         truth=f_true.astype(np.float32),
         truth_electric=truth_electric_field.astype(np.float32),
-        rk45_electric=rk45_electric_field.astype(np.float32),
+        solver_electric=solver_electric_field.astype(np.float32),
+        rk45_electric=solver_electric_field.astype(np.float32),
         decoded_latent_truth_electric=ae_electric_field.astype(np.float32),
+        solver_relative_l2=rk45_rel_l2.astype(np.float64),
         rk45_relative_l2=rk45_rel_l2.astype(np.float64),
         ae_relative_l2=ae_rel_l2.astype(np.float64),
+        solver_mse=rk45_mse.astype(np.float64),
         rk45_mse=rk45_mse.astype(np.float64),
         ae_mse=ae_mse.astype(np.float64),
         truth_electric_energy=truth_electric_energy.astype(np.float64),
-        rk45_electric_energy=rk45_electric_energy.astype(np.float64),
+        solver_electric_energy=solver_electric_energy.astype(np.float64),
+        rk45_electric_energy=solver_electric_energy.astype(np.float64),
         ae_electric_energy=ae_electric_energy.astype(np.float64),
         fill_unmodeled=np.asarray(args.fill_unmodeled),
-        solver=np.asarray(args.solver),
+        solver=np.asarray(solver_name),
         rk4_substeps=np.asarray(args.rk4_substeps, dtype=np.int32),
-        rk45_nfev=np.asarray(solution.nfev, dtype=np.int32),
-        rk45_status=np.asarray(solution.status, dtype=np.int32),
-        rk45_message=np.asarray(solution.message),
+        rk45_nfev=np.asarray(solver_nfev, dtype=np.int32),
+        rk45_status=np.asarray(solver_status, dtype=np.int32),
+        rk45_message=np.asarray(solver_message),
     )
 
-    save_error_plot(t_true, rk45_rel_l2, ae_rel_l2, args.solver, output_dir / "error_over_time.png")
+    save_error_plot(t_true, rk45_rel_l2, ae_rel_l2, solver_name, output_dir / "error_over_time.png")
     save_electric_energy_plot(
         t=t_true,
         truth_energy=truth_electric_energy,
-        solver_energy=rk45_electric_energy,
+        solver_energy=solver_electric_energy,
         ae_energy=ae_electric_energy,
-        solver_name=args.solver,
+        solver_name=solver_name,
         output_path=output_dir / "electric_energy_over_time.png",
     )
     if not args.no_animation:
@@ -1085,7 +1230,7 @@ def main() -> None:
             truth=f_true,
             prediction=f_pred,
             rel_l2=rk45_rel_l2,
-            solver_name=args.solver,
+            solver_name=solver_name,
             output_path=output_dir / "rk45_vs_truth.gif",
             max_frames=args.max_frames,
             fps=args.fps,
@@ -1097,14 +1242,15 @@ def main() -> None:
         f"case_dir: {case_dir}",
         f"system_mode: {payload.system_mode}",
         f"space_diff: {payload.space_diff}",
+        f"model_family: {payload.model_family}",
         f"used_electric_field: {payload.used_electric_field}",
         f"mode_indices: {payload.mode_indices}",
-        f"solver: {args.solver}",
+        f"solver: {solver_name}",
         f"rk4_substeps: {args.rk4_substeps}",
         f"fill_unmodeled: {args.fill_unmodeled}",
-        f"solver_success: {solution.success}",
-        f"solver_message: {solution.message}",
-        f"solver_nfev: {solution.nfev}",
+        f"solver_success: {solver_success}",
+        f"solver_message: {solver_message}",
+        f"solver_nfev: {solver_nfev}",
         f"solver_mean_relative_l2: {np.mean(rk45_rel_l2):.12e}",
         f"solver_max_relative_l2: {np.max(rk45_rel_l2):.12e}",
         f"solver_final_relative_l2: {rk45_rel_l2[-1]:.12e}",
@@ -1119,7 +1265,7 @@ def main() -> None:
     print(f"Saved electric-energy plot to: {output_dir / 'electric_energy_over_time.png'}")
     if not args.no_animation:
         print(f"Saved animation to: {output_dir / 'rk45_vs_truth.gif'}")
-    print(f"Final {args.solver} decoded relative L2 error: {rk45_rel_l2[-1]:.6e}")
+    print(f"Final {solver_name} decoded relative L2 error: {rk45_rel_l2[-1]:.6e}")
     print(f"Final decoder-only relative L2 error: {ae_rel_l2[-1]:.6e}")
 
 

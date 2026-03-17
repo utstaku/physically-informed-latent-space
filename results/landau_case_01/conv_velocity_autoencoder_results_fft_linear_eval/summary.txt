@@ -1,0 +1,89 @@
+Dominant-wave latent linear regression
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/conv_velocity_autoencoder_results.npz
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01
+latent_shape: (Nt=2000, Nx=64, Nz=5)
+mode_indices: [0, 1, 2, 3, 4]
+k_index: 1
+k_physical: 3.000000096487e-01
+k_source: user --wave-number
+fill_unmodeled: truth
+fit_fraction: 1.000000
+fit_steps: 2000
+ridge_alpha: 1.000000000000e-08
+linear_matrix_shape: (10, 10)
+fit_state_dt_relative_l2: 1.807394364398e-01
+fourier_coeff_mean_relative_l2: 3.964162019331e+00
+fourier_coeff_final_relative_l2: 7.209709151855e+00
+decoded_mean_relative_l2: 2.703142451374e-01
+decoded_final_relative_l2: 3.709286827356e-01
+decoded_mean_mse: 2.400866931003e-03
+decoded_final_mse: 3.221933592294e-03
+ae_mean_relative_l2: 3.222518616366e-02
+ae_final_relative_l2: 7.125580394780e-02
+truth_initial_electric_energy: 5.816889918672e-03
+pred_initial_electric_energy: 6.956364570217e-03
+pred_final_electric_energy: 2.200174110106e-01
+
+Modewise damping and phase-rate comparison:
+mode_0_truth_damping_rate: 9.326551458161e-02
+mode_0_pred_damping_rate: 4.839536097471e-01
+mode_0_damping_rate_error: 3.906880951655e-01
+mode_0_truth_phase_rate: -1.635991210585e-02
+mode_0_pred_phase_rate: 7.386925546389e-03
+mode_0_phase_rate_error: 2.374683765224e-02
+mode_0_truth_initial_phase: -3.141592653590e+00
+mode_0_pred_initial_phase: -3.141592653590e+00
+mode_0_truth_final_phase: -2.883077067456e+00
+mode_0_pred_final_phase: -2.921966904051e+00
+mode_1_truth_damping_rate: 2.910114473141e-01
+mode_1_pred_damping_rate: 5.835128729381e-01
+mode_1_damping_rate_error: 2.925014256239e-01
+mode_1_truth_phase_rate: 1.256242667287e+00
+mode_1_pred_phase_rate: 1.406797130184e+00
+mode_1_phase_rate_error: 1.505544628970e-01
+mode_1_truth_initial_phase: -3.141592653590e+00
+mode_1_pred_initial_phase: -3.141592653590e+00
+mode_1_truth_final_phase: 9.903732065459e+00
+mode_1_pred_final_phase: 9.946234057753e+00
+mode_2_truth_damping_rate: 3.453499750056e-01
+mode_2_pred_damping_rate: 6.178883761755e-01
+mode_2_damping_rate_error: 2.725384011699e-01
+mode_2_truth_phase_rate: -1.071246103411e+00
+mode_2_pred_phase_rate: -9.114370095152e-01
+mode_2_phase_rate_error: 1.598090938960e-01
+mode_2_truth_initial_phase: 3.141592653590e+00
+mode_2_pred_initial_phase: 3.141592653590e+00
+mode_2_truth_final_phase: -6.665935916288e+00
+mode_2_pred_final_phase: -6.604020167279e+00
+mode_3_truth_damping_rate: 1.827288278918e-01
+mode_3_pred_damping_rate: 4.435669914834e-01
+mode_3_damping_rate_error: 2.608381635916e-01
+mode_3_truth_phase_rate: -5.347419949420e-01
+mode_3_pred_phase_rate: 1.278393322484e-01
+mode_3_phase_rate_error: 6.625813271904e-01
+mode_3_truth_initial_phase: -3.141592653590e+00
+mode_3_pred_initial_phase: -3.141592653590e+00
+mode_3_truth_final_phase: -8.722553696223e+00
+mode_3_pred_final_phase: -3.523171649812e+00
+mode_4_truth_damping_rate: 2.012103415954e-01
+mode_4_pred_damping_rate: 4.773526087330e-01
+mode_4_damping_rate_error: 2.761422671375e-01
+mode_4_truth_phase_rate: 2.047241946875e-01
+mode_4_pred_phase_rate: 6.037762434566e-02
+mode_4_phase_rate_error: -1.443465703418e-01
+mode_4_truth_initial_phase: 2.003877928388e-17
+mode_4_pred_initial_phase: 2.003877928388e-17
+mode_4_truth_final_phase: 1.714805175389e+00
+mode_4_pred_final_phase: 2.542211496378e+00
+
+Learned linear system:
+d/dt Re(z_hat_0[k_index=1, k=3.000000e-01]) = 3.657783839022e-01 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + 1.098078099281e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + -1.739660337103e+00 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + 1.007587995068e+00 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + -1.544085725003e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + -1.677865119295e+00 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + -6.599587639290e-01 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + 1.727415232664e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + -2.190984859056e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -2.164694890225e-01 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Im(z_hat_0[k_index=1, k=3.000000e-01]) = 1.925445076268e-01 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + 2.384580476955e-01 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + 2.561333226362e-01 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + 7.298321239306e-02 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + -5.130599802883e-01 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + -2.578152581438e-01 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + -1.107884402051e+00 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + -1.851778462481e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + -9.159588739214e-02 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -2.434921381570e-02 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Re(z_hat_1[k_index=1, k=3.000000e-01]) = 2.333407860324e-02 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + -2.373032239563e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + -9.063330903368e-01 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + -2.116977089831e+00 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + -1.738133341002e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + 2.212433664553e+00 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + -7.596542323113e-01 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + -5.604435230993e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + -2.518544862784e-02 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -1.601407574387e+00 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Im(z_hat_1[k_index=1, k=3.000000e-01]) = -2.158877595120e-02 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + -1.084384745365e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + 4.214932691173e+00 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + 1.482051264629e-01 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + 3.215965095035e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + -9.363179715444e-01 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + 2.255298215629e-01 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + 5.019453775897e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + 1.576634954835e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + 5.202172642874e-01 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Re(z_hat_2[k_index=1, k=3.000000e-01]) = -9.283464218202e-01 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + 3.009584396400e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + 1.293152857278e+00 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + 1.768188745337e+00 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + 2.706655080784e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + -2.346359578145e+00 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + 2.325079279650e+00 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + 1.218062661268e+00 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + -2.055894655558e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + 4.222842080511e-01 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Im(z_hat_2[k_index=1, k=3.000000e-01]) = -2.202689175845e-01 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + -8.299321275124e-01 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + 6.740389349290e-01 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + 4.442104365829e-02 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + 1.037917959886e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + 8.609061790075e-02 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + 1.920427795420e-01 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + 1.054580180208e+00 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + -1.534287024714e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -1.324434900873e+00 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Re(z_hat_3[k_index=1, k=3.000000e-01]) = -1.456432116369e-02 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + 1.100940040487e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + -2.033672922524e-01 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + -7.072793947459e-01 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + -1.302470333886e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + -7.415054098890e-03 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + -6.963183473505e-01 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + -5.856884126062e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + 7.427300582312e-02 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + 3.442095011325e-01 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Im(z_hat_3[k_index=1, k=3.000000e-01]) = 4.487293555786e-02 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + 1.819109905806e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + -3.953600587364e+00 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + -1.291511155877e+00 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + -3.168487044670e+00 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + 1.709949664681e+00 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + -1.517118869372e+00 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + 8.696132668908e-02 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + 3.479923732798e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -1.037920599250e+00 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Re(z_hat_4[k_index=1, k=3.000000e-01]) = -2.274967920570e-01 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + -6.133744314893e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + -1.478436091773e+00 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + -2.120533116239e+00 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + 7.548384258558e-01 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + 3.526690991045e+00 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + 3.372553338193e+00 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + -8.397342733690e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + 1.535867235523e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -1.853779084259e+00 * Im(z_hat_4[k_index=1, k=3.000000e-01])
+d/dt Im(z_hat_4[k_index=1, k=3.000000e-01]) = -8.755526006892e-02 * Re(z_hat_0[k_index=1, k=3.000000e-01]) + 3.230540778752e+00 * Im(z_hat_0[k_index=1, k=3.000000e-01]) + 7.345083564384e-01 * Re(z_hat_1[k_index=1, k=3.000000e-01]) + -7.988902781861e-02 * Im(z_hat_1[k_index=1, k=3.000000e-01]) + 6.092370694891e-01 * Re(z_hat_2[k_index=1, k=3.000000e-01]) + 9.614530741979e-01 * Im(z_hat_2[k_index=1, k=3.000000e-01]) + -2.208711300213e+00 * Re(z_hat_3[k_index=1, k=3.000000e-01]) + 3.200997316601e-01 * Im(z_hat_3[k_index=1, k=3.000000e-01]) + 6.416976552016e-01 * Re(z_hat_4[k_index=1, k=3.000000e-01]) + -4.256197139198e-02 * Im(z_hat_4[k_index=1, k=3.000000e-01])

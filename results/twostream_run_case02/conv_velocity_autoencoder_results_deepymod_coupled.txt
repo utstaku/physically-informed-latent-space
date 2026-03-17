@@ -1,0 +1,277 @@
+DeepMoD latent dynamics discovery
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/conv_velocity_autoencoder_results.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/conv_velocity_autoencoder_results_deepymod_coupled.npz
+system: coupled
+network: tanh
+hidden_layers: 64,64,64
+library_type: full
+poly_order: 2
+diff_order: 1
+sparse_estimator: stlsq
+constraint: least-squares
+device: cuda
+sampled_nt: 1001
+sampled_nx: 128
+sampled_dt: 5.000000e-03
+sampled_dx: 4.908739e-02
+case_name: T_1.00_k_1.00
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/vlasov_twostream_param_grid/T_1.00_k_1.00
+
+Library terms:
+  00: 1
+  01: z_0
+  02: z_0_x
+  03: z_1
+  04: z_1_x
+  05: z_2
+  06: z_2_x
+  07: z_3
+  08: z_3_x
+  09: z_4
+  10: z_4_x
+  11: z_5
+  12: z_5_x
+  13: z_6
+  14: z_6_x
+  15: z_7
+  16: z_7_x
+  17: z_0 z_0
+  18: z_0 z_0_x
+  19: z_0 z_1
+  20: z_0 z_1_x
+  21: z_0 z_2
+  22: z_0 z_2_x
+  23: z_0 z_3
+  24: z_0 z_3_x
+  25: z_0 z_4
+  26: z_0 z_4_x
+  27: z_0 z_5
+  28: z_0 z_5_x
+  29: z_0 z_6
+  30: z_0 z_6_x
+  31: z_0 z_7
+  32: z_0 z_7_x
+  33: z_0_x z_0_x
+  34: z_0_x z_1
+  35: z_0_x z_1_x
+  36: z_0_x z_2
+  37: z_0_x z_2_x
+  38: z_0_x z_3
+  39: z_0_x z_3_x
+  40: z_0_x z_4
+  41: z_0_x z_4_x
+  42: z_0_x z_5
+  43: z_0_x z_5_x
+  44: z_0_x z_6
+  45: z_0_x z_6_x
+  46: z_0_x z_7
+  47: z_0_x z_7_x
+  48: z_1 z_1
+  49: z_1 z_1_x
+  50: z_1 z_2
+  51: z_1 z_2_x
+  52: z_1 z_3
+  53: z_1 z_3_x
+  54: z_1 z_4
+  55: z_1 z_4_x
+  56: z_1 z_5
+  57: z_1 z_5_x
+  58: z_1 z_6
+  59: z_1 z_6_x
+  60: z_1 z_7
+  61: z_1 z_7_x
+  62: z_1_x z_1_x
+  63: z_1_x z_2
+  64: z_1_x z_2_x
+  65: z_1_x z_3
+  66: z_1_x z_3_x
+  67: z_1_x z_4
+  68: z_1_x z_4_x
+  69: z_1_x z_5
+  70: z_1_x z_5_x
+  71: z_1_x z_6
+  72: z_1_x z_6_x
+  73: z_1_x z_7
+  74: z_1_x z_7_x
+  75: z_2 z_2
+  76: z_2 z_2_x
+  77: z_2 z_3
+  78: z_2 z_3_x
+  79: z_2 z_4
+  80: z_2 z_4_x
+  81: z_2 z_5
+  82: z_2 z_5_x
+  83: z_2 z_6
+  84: z_2 z_6_x
+  85: z_2 z_7
+  86: z_2 z_7_x
+  87: z_2_x z_2_x
+  88: z_2_x z_3
+  89: z_2_x z_3_x
+  90: z_2_x z_4
+  91: z_2_x z_4_x
+  92: z_2_x z_5
+  93: z_2_x z_5_x
+  94: z_2_x z_6
+  95: z_2_x z_6_x
+  96: z_2_x z_7
+  97: z_2_x z_7_x
+  98: z_3 z_3
+  99: z_3 z_3_x
+  100: z_3 z_4
+  101: z_3 z_4_x
+  102: z_3 z_5
+  103: z_3 z_5_x
+  104: z_3 z_6
+  105: z_3 z_6_x
+  106: z_3 z_7
+  107: z_3 z_7_x
+  108: z_3_x z_3_x
+  109: z_3_x z_4
+  110: z_3_x z_4_x
+  111: z_3_x z_5
+  112: z_3_x z_5_x
+  113: z_3_x z_6
+  114: z_3_x z_6_x
+  115: z_3_x z_7
+  116: z_3_x z_7_x
+  117: z_4 z_4
+  118: z_4 z_4_x
+  119: z_4 z_5
+  120: z_4 z_5_x
+  121: z_4 z_6
+  122: z_4 z_6_x
+  123: z_4 z_7
+  124: z_4 z_7_x
+  125: z_4_x z_4_x
+  126: z_4_x z_5
+  127: z_4_x z_5_x
+  128: z_4_x z_6
+  129: z_4_x z_6_x
+  130: z_4_x z_7
+  131: z_4_x z_7_x
+  132: z_5 z_5
+  133: z_5 z_5_x
+  134: z_5 z_6
+  135: z_5 z_6_x
+  136: z_5 z_7
+  137: z_5 z_7_x
+  138: z_5_x z_5_x
+  139: z_5_x z_6
+  140: z_5_x z_6_x
+  141: z_5_x z_7
+  142: z_5_x z_7_x
+  143: z_6 z_6
+  144: z_6 z_6_x
+  145: z_6 z_7
+  146: z_6 z_7_x
+  147: z_6_x z_6_x
+  148: z_6_x z_7
+  149: z_6_x z_7_x
+  150: z_7 z_7
+  151: z_7 z_7_x
+  152: z_7_x z_7_x
+
+Mode 0
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 5.321345e-02
+  full_fit_mse: 5.327807e-02
+  residual_l2: 1.575845e+02
+  ut_l2: 3.261218e+02
+  relative_residual_l2: 4.832073e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 19
+  equation: z_0_t = +1.576947e-01*z_0_x +3.761688e-02*z_1_x -3.363414e-01*z_2 -3.762387e-01*z_4 -2.593356e-01*z_4_x +5.316623e-01*z_6 +1.072410e-01*z_6_x -6.214080e-02*z_0 z_1_x +2.394667e-01*z_0 z_2 +1.358359e-01*z_0_x z_2_x +1.058818e-01*z_1 z_4 +1.804629e-01*z_1_x z_4_x -2.949280e-02*z_2 z_2 +6.433560e-02*z_2 z_4_x -1.556389e-01*z_2 z_5_x -8.694230e-02*z_2 z_6 -2.963625e-01*z_2 z_6_x +1.529535e-01*z_4 z_4_x -1.250896e-01*z_4_x z_5
+
+Mode 1
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 5.284669e-02
+  full_fit_mse: 5.302650e-02
+  residual_l2: 4.795704e+02
+  ut_l2: 6.227849e+02
+  relative_residual_l2: 7.700418e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 15
+  equation: z_1_t = +1.966376e-01*z_0_x -1.934112e-01*z_1_x +3.911618e-01*z_2_x +4.067379e-01*z_3 -2.183674e-01*z_4_x -2.437022e-01*z_6_x -2.806526e-01*z_7_x +5.259354e-03*z_0 z_3 +2.190008e-01*z_0 z_6 -9.451048e-02*z_2 z_2_x -1.142907e-01*z_2_x z_4 +1.536242e-01*z_4 z_7_x -7.112303e-02*z_4_x z_7 +1.388424e-01*z_6 z_7_x -1.106540e-01*z_6_x z_7
+
+Mode 2
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 6.942598e-02
+  full_fit_mse: 6.972332e-02
+  residual_l2: 3.127144e+02
+  ut_l2: 4.687570e+02
+  relative_residual_l2: 6.671141e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 18
+  equation: z_2_t = +3.142572e-03*z_0 +4.435151e-01*z_1_x +1.692020e-01*z_2_x +4.446479e-02*z_3 -2.835422e-01*z_4 +2.352149e-02*z_5 -2.463554e-01*z_7_x -1.850447e-01*z_0 z_2 -1.642060e-01*z_0 z_3 +1.718489e-01*z_0 z_5_x -6.570407e-02*z_1_x z_2 -8.711653e-02*z_1_x z_3 -1.083701e-01*z_2 z_3 +1.461566e-01*z_2_x z_7 -2.563840e-01*z_3 z_5 -1.117385e-01*z_4 z_5 -2.310238e-01*z_5 z_6 +1.734704e-01*z_6 z_7_x
+
+Mode 3
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 7.238048e-02
+  full_fit_mse: 7.225488e-02
+  residual_l2: 2.763122e+02
+  ut_l2: 4.262056e+02
+  relative_residual_l2: 6.483073e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 12
+  equation: z_3_t = -4.292774e-01*z_1 -3.319843e-01*z_2 -2.723793e-01*z_4_x +1.957034e-01*z_6_x +2.511351e-02*z_0 z_1 +9.128711e-02*z_1 z_4 -1.013071e-01*z_1 z_7 +8.957634e-02*z_1_x z_4_x -4.329047e-02*z_2 z_2 +1.209793e-01*z_4 z_4_x +1.297347e-01*z_4 z_7_x +1.223542e-01*z_4_x z_6
+
+Mode 4
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 4.659907e-02
+  full_fit_mse: 4.606934e-02
+  residual_l2: 4.593134e+02
+  ut_l2: 6.021528e+02
+  relative_residual_l2: 7.627855e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 18
+  equation: z_4_t = -2.725918e-01*z_0_x -2.970512e-01*z_1_x +2.110237e-01*z_2 -5.602960e-01*z_3_x -5.550659e-01*z_5_x -1.764680e-02*z_6 -1.253983e-01*z_7 +6.447227e-02*z_0 z_1_x +8.140370e-03*z_0 z_3_x -1.532428e-01*z_0 z_6_x +2.359469e-01*z_1 z_5_x +6.266196e-03*z_2 z_2 +1.760855e-01*z_2 z_5_x -8.305755e-02*z_2_x z_3 +1.130599e-01*z_3_x z_3_x +1.016644e-01*z_4_x z_5 +8.026735e-02*z_5_x z_5_x +6.595083e-02*z_7_x z_7_x
+
+Mode 5
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 5.057956e-02
+  full_fit_mse: 5.033497e-02
+  residual_l2: 2.030492e+02
+  ut_l2: 3.464691e+02
+  relative_residual_l2: 5.860528e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 12
+  equation: z_5_t = -3.321673e-01*z_1 -1.026950e-01*z_1_x +1.047164e-01*z_4 -4.360538e-01*z_4_x +4.782964e-02*z_0 z_4_x -8.080675e-02*z_1 z_7 -1.419905e-01*z_4 z_4 +9.815720e-02*z_4 z_4_x -1.145133e-01*z_4 z_6_x +1.111659e-01*z_4 z_7_x +1.903804e-01*z_4_x z_6 -2.067308e-01*z_5 z_6
+
+Mode 6
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 6.663165e-02
+  full_fit_mse: 6.714933e-02
+  residual_l2: 4.333209e+02
+  ut_l2: 5.857311e+02
+  relative_residual_l2: 7.397950e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 19
+  equation: z_6_t = -1.546661e-01*z_0 +6.588104e-02*z_0_x +1.096921e-01*z_1 -3.132013e-01*z_1_x -2.283425e-01*z_2_x +1.256234e-01*z_3_x +3.671527e-01*z_4 +3.451244e-01*z_5_x -2.769460e-01*z_6_x -3.587219e-02*z_0 z_4 +9.271692e-02*z_0 z_6_x -8.687060e-02*z_0_x z_2 -2.326390e-01*z_1 z_4 -1.923647e-01*z_1 z_5_x -6.836283e-02*z_1_x z_4_x +1.645062e-01*z_2 z_4_x +2.332829e-01*z_2 z_6_x +2.822389e-01*z_3 z_3 +1.859090e-01*z_5 z_7
+
+Mode 7
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case02/deepymod_logs/coupled_modes_00_01_02_03_04_05_06_07
+  sample_fit_mse: 3.930662e-02
+  full_fit_mse: 4.009970e-02
+  residual_l2: 1.501169e+02
+  ut_l2: 3.358396e+02
+  relative_residual_l2: 4.469899e-01
+  selected_points: 128128
+  train_points: 128128
+  test_points: 128128
+  nonzero_terms: 26
+  equation: z_7_t = -8.676191e-02*z_1_x -2.450884e-01*z_2_x -2.433378e-01*z_3_x +4.361949e-01*z_4 -6.345869e-01*z_6 +1.188850e-01*z_0 z_2_x -2.553304e-01*z_0 z_3 -1.117661e-01*z_0 z_3_x +3.713771e-02*z_0 z_6 -1.099681e-01*z_0 z_7 +2.874104e-01*z_0_x z_3 +2.030852e-01*z_1 z_2 +8.758349e-02*z_1 z_4_x +1.204118e-01*z_1 z_5 +1.357870e-01*z_1 z_6 -2.972244e-02*z_1 z_7_x -2.253491e-01*z_2 z_4 -2.369781e-01*z_2 z_5 -2.820327e-01*z_2 z_5_x -5.445140e-02*z_2 z_6 +1.663273e-01*z_2_x z_6 +9.056550e-02*z_3_x z_3_x -4.318398e-02*z_4 z_4 -3.297842e-01*z_5 z_6 -1.255632e-01*z_5_x z_6_x -1.458374e-01*z_7 z_7

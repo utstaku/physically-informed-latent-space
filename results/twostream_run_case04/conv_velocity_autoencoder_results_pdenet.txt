@@ -1,0 +1,31 @@
+PDE-Net-style latent dynamics discovery with SymNet
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case04/conv_velocity_autoencoder_results.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case04/conv_velocity_autoencoder_results_pdenet.npz
+mode_indices: [0, 1, 2, 3, 4]
+diff_order: 1
+poly_order_proxy: 1
+kernel_size: 5
+symnet_hidden_dim: 10
+symnet_num_layers: 1
+proxy_library_terms: 11
+training_rollout_steps: 8
+train_rhs_mse: 1.326884e+01
+val_rhs_mse: 1.326884e+01
+full_rhs_mse: 1.326884e+01
+train_state_mse: 3.317209e-04
+val_state_mse: 3.317209e-04
+full_state_mse: 3.317209e-04
+train_rollout_relative_l2: nan
+val_rollout_relative_l2: nan
+full_rollout_relative_l2: nan
+proxy_relative_l2: 4.952113e-01
+
+Post-hoc symbolic proxy of the learned SymNet (not the trained model itself):
+dz0/dt = -1.364746 + -2.572474 * z0 + -0.989634 * z1 + -0.872527 * z2 + 2.086216 * z3 + 1.844508 * z4 + -0.707411 * z0_{x} + 0.141472 * z1_{x} + 0.094459 * z2_{x} + -0.348491 * z3_{x} + 0.756130 * z4_{x}
+dz1/dt = -0.760493 + -0.140568 * z0 + 0.227065 * z1 + -1.821901 * z2 + 6.398295 * z3 + -0.507458 * z4 + -0.116951 * z0_{x} + 0.040664 * z1_{x} + -0.363031 * z2_{x} + 1.691350 * z3_{x} + -0.084355 * z4_{x}
+dz2/dt = -1.287896 + 1.550568 * z0 + -2.028147 * z1 + -0.497687 * z2 + 0.719671 * z3 + -0.721140 * z4 + -0.012216 * z0_{x} + -0.550444 * z1_{x} + -0.185214 * z2_{x} + 0.707564 * z3_{x} + -0.459474 * z4_{x}
+dz3/dt = 0.443875 + -2.486276 * z0 + 3.223730 * z1 + 1.020762 * z2 + 0.923140 * z3 + -0.602932 * z4 + -0.169744 * z0_{x} + 1.387746 * z1_{x} + 0.233139 * z2_{x} + 0.173771 * z3_{x} + 0.124714 * z4_{x}
+dz4/dt = 0.786845 + 1.518937 * z0 + 2.142642 * z1 + -0.453527 * z2 + 1.271366 * z3 + 1.897764 * z4 + 0.584666 * z0_{x} + 0.394600 * z1_{x} + -0.094877 * z2_{x} + -0.167205 * z3_{x} + 0.605357 * z4_{x}
+
+Learned derivative kernels:
+order 1: -8.710945e-02 -6.861845e-01 -3.472514e-02 5.898358e-01 5.973559e-02

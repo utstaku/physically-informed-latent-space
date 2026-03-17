@@ -1,0 +1,45 @@
+Linear coupled latent transport fit
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/conv_velocity_autoencoder_results.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/conv_velocity_autoencoder_results_linear_transport.npz
+system: coupled
+fit_equation: Z_t = A Z + B Z_x
+ridge_alpha: 1.000000000000e-06
+fit_fraction: 1.000000000000e+00
+fit_steps: 2000
+time_diff: FD
+space_diff: Fourier
+mode_indices: 0 1 2 3
+library_labels:
+  00: z_0
+  01: z_1
+  02: z_2
+  03: z_3
+  04: z_0_x
+  05: z_1_x
+  06: z_2_x
+  07: z_3_x
+per_mode_metrics:
+- mode 0:
+  fit_relative_l2: 5.708511439603e-01
+  full_relative_l2: 5.708511439603e-01
+  fit_mse: 3.093778453059e+00
+  full_mse: 3.093778453059e+00
+  equation: z_0_t = -2.809243e-01*z_0 +5.523662e-01*z_1 +6.976381e-01*z_2 +5.426471e-01*z_3 -2.457199e-01*z_0_x -2.817224e+00*z_1_x -4.492927e-01*z_2_x -2.879320e-01*z_3_x
+- mode 1:
+  fit_relative_l2: 5.543510029949e-01
+  full_relative_l2: 5.543510029949e-01
+  fit_mse: 1.739645731863e+00
+  full_mse: 1.739645731863e+00
+  equation: z_1_t = +2.654879e-01*z_0 +3.997542e-01*z_1 -6.131177e-02*z_2 +2.392385e-01*z_3 -1.141928e+00*z_0_x +3.707491e-01*z_1_x +1.015028e+00*z_2_x +5.673610e-01*z_3_x
+- mode 2:
+  fit_relative_l2: 5.855874585341e-01
+  full_relative_l2: 5.855874585341e-01
+  fit_mse: 3.894645478837e+00
+  full_mse: 3.894645478837e+00
+  equation: z_2_t = -4.144022e-01*z_0 +8.739063e-01*z_1 +2.401113e-01*z_2 +2.807690e-01*z_3 +8.550578e-01*z_0_x +1.125275e+00*z_1_x -4.048109e-01*z_2_x -8.013299e-01*z_3_x
+- mode 3:
+  fit_relative_l2: 5.880975193662e-01
+  full_relative_l2: 5.880975193662e-01
+  fit_mse: 3.998126300340e+00
+  full_mse: 3.998126300340e+00
+  equation: z_3_t = -1.233935e-01*z_0 -1.592876e+00*z_1 -3.796393e-01*z_2 -5.519605e-02*z_3 +7.009011e-01*z_0_x +2.240601e+00*z_1_x -3.428623e-01*z_2_x +3.122258e-01*z_3_x

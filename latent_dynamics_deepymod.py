@@ -72,6 +72,17 @@ def parse_args() -> argparse.Namespace:
         help="Maximum spatial derivative order in the DeepMoD library.",
     )
     parser.add_argument(
+        "--library-type",
+        type=str,
+        default="full",
+        choices=("full", "state-polynomial"),
+        help=(
+            "Library family. 'full' keeps the current tensor-product library over states "
+            "and derivatives. 'state-polynomial' keeps derivative terms linear and only "
+            "allows nonlinear products among latent states."
+        ),
+    )
+    parser.add_argument(
         "--network",
         type=str,
         default="tanh",
@@ -302,7 +313,7 @@ def derivative_label(mode_index: int, order: int, generic: bool = False) -> str:
     return f"{prefix}_x{'x' * (order - 1)}"
 
 
-def build_library_labels(poly_order: int, diff_order: int) -> List[str]:
+def build_full_library_labels(poly_order: int, diff_order: int) -> List[str]:
     labels: List[str] = []
     deriv_terms = ["1"]
     for order in range(1, diff_order + 1):
@@ -325,6 +336,15 @@ def build_library_labels(poly_order: int, diff_order: int) -> List[str]:
     return labels
 
 
+def build_state_polynomial_labels(poly_order: int, diff_order: int) -> List[str]:
+    labels = ["1", "z"]
+    for order in range(1, diff_order + 1):
+        labels.append(derivative_label(mode_index=0, order=order, generic=True))
+    for power in range(2, poly_order + 1):
+        labels.append(f"z^{power}")
+    return labels
+
+
 def build_coupled_base_labels(mode_indices: Sequence[int], diff_order: int) -> List[str]:
     labels: List[str] = []
     for mode_index in mode_indices:
@@ -334,13 +354,48 @@ def build_coupled_base_labels(mode_indices: Sequence[int], diff_order: int) -> L
     return labels
 
 
-def build_coupled_library_labels(mode_indices: Sequence[int], poly_order: int, diff_order: int) -> List[str]:
+def build_full_coupled_library_labels(mode_indices: Sequence[int], poly_order: int, diff_order: int) -> List[str]:
     base_labels = build_coupled_base_labels(mode_indices, diff_order)
     labels = ["1"]
     for degree in range(1, poly_order + 1):
         for combo in combinations_with_replacement(base_labels, degree):
             labels.append(" ".join(combo))
     return labels
+
+
+def build_coupled_state_polynomial_labels(
+    mode_indices: Sequence[int],
+    poly_order: int,
+    diff_order: int,
+) -> List[str]:
+    state_labels = [f"z_{mode_index}" for mode_index in mode_indices]
+    derivative_labels: List[str] = []
+    for mode_index in mode_indices:
+        for order in range(1, diff_order + 1):
+            derivative_labels.append(derivative_label(mode_index=mode_index, order=order, generic=False))
+
+    labels = ["1", *state_labels, *derivative_labels]
+    for degree in range(2, poly_order + 1):
+        for combo in combinations_with_replacement(state_labels, degree):
+            labels.append(" ".join(combo))
+    return labels
+
+
+def build_library_labels(poly_order: int, diff_order: int, library_type: str) -> List[str]:
+    if library_type == "state-polynomial":
+        return build_state_polynomial_labels(poly_order, diff_order)
+    return build_full_library_labels(poly_order, diff_order)
+
+
+def build_coupled_library_labels(
+    mode_indices: Sequence[int],
+    poly_order: int,
+    diff_order: int,
+    library_type: str,
+) -> List[str]:
+    if library_type == "state-polynomial":
+        return build_coupled_state_polynomial_labels(mode_indices, poly_order, diff_order)
+    return build_full_coupled_library_labels(mode_indices, poly_order, diff_order)
 
 
 def format_equation(mode_index: int, labels: Sequence[str], coeffs: np.ndarray, tol: float = 1e-12) -> str:
@@ -468,6 +523,79 @@ class CoupledModeLibrary1D(Library):
         return time_derivs, [theta] * self.n_outputs
 
 
+def build_state_polynomial_theta(
+    state_features: Sequence[torch.Tensor],
+    derivative_features: Sequence[torch.Tensor],
+    poly_order: int,
+) -> torch.Tensor:
+    theta_columns = [torch.ones_like(state_features[0])]
+    theta_columns.extend(state_features)
+    theta_columns.extend(derivative_features)
+
+    for degree in range(2, poly_order + 1):
+        for combo in combinations_with_replacement(range(len(state_features)), degree):
+            column = state_features[combo[0]]
+            for idx in combo[1:]:
+                column = column * state_features[idx]
+            theta_columns.append(column)
+    return torch.cat(theta_columns, dim=1)
+
+
+class StatePolynomialLibrary1D(Library):
+    def __init__(self, poly_order: int, diff_order: int) -> None:
+        super().__init__()
+        self.poly_order = poly_order
+        self.diff_order = diff_order
+
+    def library(self, input: tuple[torch.Tensor, torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        prediction, data = input
+        if prediction.shape[1] != 1:
+            raise ValueError(f"StatePolynomialLibrary1D expected one output, got {prediction.shape[1]}")
+
+        time_deriv, derivatives = library_deriv(data, prediction, self.diff_order)
+        derivative_features = [derivatives[:, order : order + 1] for order in range(1, self.diff_order + 1)]
+        theta = build_state_polynomial_theta(
+            state_features=[prediction],
+            derivative_features=derivative_features,
+            poly_order=self.poly_order,
+        )
+        return [time_deriv], [theta]
+
+
+class CoupledStatePolynomialLibrary1D(Library):
+    def __init__(self, n_outputs: int, poly_order: int, diff_order: int) -> None:
+        super().__init__()
+        self.n_outputs = n_outputs
+        self.poly_order = poly_order
+        self.diff_order = diff_order
+
+    def library(self, input: tuple[torch.Tensor, torch.Tensor]) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
+        prediction, data = input
+        if prediction.shape[1] != self.n_outputs:
+            raise ValueError(
+                f"CoupledStatePolynomialLibrary1D expected {self.n_outputs} outputs, got {prediction.shape[1]}"
+            )
+
+        time_derivs: list[torch.Tensor] = []
+        state_features: list[torch.Tensor] = []
+        derivative_features: list[torch.Tensor] = []
+
+        for output in range(self.n_outputs):
+            mode_prediction = prediction[:, output : output + 1]
+            time_deriv, derivatives = library_deriv(data, mode_prediction, self.diff_order)
+            time_derivs.append(time_deriv)
+            state_features.append(mode_prediction)
+            for order in range(1, self.diff_order + 1):
+                derivative_features.append(derivatives[:, order : order + 1])
+
+        theta = build_state_polynomial_theta(
+            state_features=state_features,
+            derivative_features=derivative_features,
+            poly_order=self.poly_order,
+        )
+        return time_derivs, [theta] * self.n_outputs
+
+
 class STLSQEstimator(Estimator):
     def __init__(self, threshold: float, alpha: float, max_iter: int) -> None:
         super().__init__()
@@ -498,6 +626,26 @@ def build_constraint(args: argparse.Namespace):
     if args.constraint == "ridge":
         return Ridge(l=args.constraint_ridge_lambda)
     return LeastSquares()
+
+
+def build_independent_library(args: argparse.Namespace):
+    if args.library_type == "state-polynomial":
+        return StatePolynomialLibrary1D(poly_order=args.poly_order, diff_order=args.diff_order)
+    return Library1D(poly_order=args.poly_order, diff_order=args.diff_order)
+
+
+def build_coupled_library(args: argparse.Namespace, n_outputs: int):
+    if args.library_type == "state-polynomial":
+        return CoupledStatePolynomialLibrary1D(
+            n_outputs=n_outputs,
+            poly_order=args.poly_order,
+            diff_order=args.diff_order,
+        )
+    return CoupledModeLibrary1D(
+        n_outputs=n_outputs,
+        poly_order=args.poly_order,
+        diff_order=args.diff_order,
+    )
 
 
 def subsample_latent(
@@ -606,7 +754,7 @@ def train_independent_mode(
 
     model = DeepMoD(
         function_approximator=build_function_approximator(args, hidden_layers, n_outputs=1),
-        library=Library1D(poly_order=args.poly_order, diff_order=args.diff_order),
+        library=build_independent_library(args),
         sparsity_estimator=build_sparse_estimator(args),
         constraint=build_constraint(args),
     ).to(device)
@@ -685,11 +833,7 @@ def train_coupled_system(
 
     model = DeepMoD(
         function_approximator=build_function_approximator(args, hidden_layers, n_outputs=len(mode_indices)),
-        library=CoupledModeLibrary1D(
-            n_outputs=len(mode_indices),
-            poly_order=args.poly_order,
-            diff_order=args.diff_order,
-        ),
+        library=build_coupled_library(args, n_outputs=len(mode_indices)),
         sparsity_estimator=build_sparse_estimator(args),
         constraint=build_constraint(args),
     ).to(device)
@@ -767,6 +911,7 @@ def write_report(
         f"system: {args.system}",
         f"network: {args.network}",
         f"hidden_layers: {args.hidden_layers}",
+        f"library_type: {args.library_type}",
         f"poly_order: {args.poly_order}",
         f"diff_order: {args.diff_order}",
         f"sparse_estimator: {args.sparse_estimator}",
@@ -829,7 +974,12 @@ def main() -> None:
 
     coords = coords.astype(np.float32)
     if args.system == "coupled":
-        library_labels = build_coupled_library_labels(mode_indices, args.poly_order, args.diff_order)
+        library_labels = build_coupled_library_labels(
+            mode_indices,
+            args.poly_order,
+            args.diff_order,
+            args.library_type,
+        )
         coupled_values = sampled_latent[:, :, mode_indices].reshape(-1, len(mode_indices)).astype(np.float32)
         mode_results = train_coupled_system(
             mode_indices=mode_indices,
@@ -841,7 +991,7 @@ def main() -> None:
             output_dir=output_dir,
         )
     else:
-        library_labels = build_library_labels(args.poly_order, args.diff_order)
+        library_labels = build_library_labels(args.poly_order, args.diff_order, args.library_type)
         mode_results = []
         for mode_index in mode_indices:
             values = sampled_latent[:, :, mode_index].reshape(-1, 1).astype(np.float32)
@@ -883,6 +1033,7 @@ def main() -> None:
         num_test_points=np.asarray([result["num_test_points"] for result in mode_results], dtype=np.int32),
         log_dirs=np.asarray([result["log_dir"] for result in mode_results]),
         system=np.asarray(args.system),
+        library_type=np.asarray(args.library_type),
         poly_order=np.asarray(args.poly_order),
         diff_order=np.asarray(args.diff_order),
         network=np.asarray(args.network),

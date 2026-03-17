@@ -1,0 +1,19 @@
+pde_file: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_02/conv_velocity_autoencoder_results_deepymod_coupled.npz
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_02/conv_velocity_autoencoder_results.npz
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_02
+system_mode: coupled
+space_diff: FD
+used_electric_field: False
+mode_indices: [0, 1, 2, 3]
+solver: RK45
+rk4_substeps: 1
+fill_unmodeled: truth
+solver_success: True
+solver_message: The solver successfully reached the end of the integration interval.
+solver_nfev: 12008
+solver_mean_relative_l2: 1.856282551458e-02
+solver_max_relative_l2: 2.389748897016e-02
+solver_final_relative_l2: 2.136708123463e-02
+ae_mean_relative_l2: 6.765094053726e-05
+ae_max_relative_l2: 1.829580032914e-04
+ae_final_relative_l2: 1.829580032914e-04

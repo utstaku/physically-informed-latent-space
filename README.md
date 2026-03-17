@@ -1,6 +1,6 @@
 # Vlasov Latent Dynamics with PDE-FIND
 
-Discovery of parsimonious dynamical equations for latent variables learned from Vlasov-Poisson plasma simulations using autoencoder compression and PDE-FIND (sparse regression).
+Discovery of latent dynamical models for variables learned from Vlasov-Poisson plasma simulations using autoencoder compression, including PDE-FIND, DeepMoD sparse regression, and dense linear transport fits.
 
 ## Overview
 
@@ -8,7 +8,7 @@ This project applies machine learning to discover low-dimensional latent dynamic
 
 1. **Compression**: Train a convolutional autoencoder on velocity distribution functions `f(x, v, t)` to learn a low-dimensional latent representation `z_k(x, t)` for each spatial point.
 
-2. **Discovery**: Use PDE-FIND (sparse regression via STRidge) to discover PDEs governing the evolution of the latent variables and their coupling to the electric field.
+2. **Discovery**: Fit latent dynamics with PDE-FIND, with DeepMoD sparse regression, or with a dense linear transport model.
 
 3. **Analysis**: Examine the discovered equations to understand the essential physics captured in the latent space.
 
@@ -19,6 +19,10 @@ PDE_find/
 ├── Conv_velocity_AE.py          # Convolutional autoencoder training
 ├── latent_dynamics.py           # Full PDE-FIND discovery with flexible library
 ├── latent_dynamics_compact.py   # Compact discovery with fixed coupled library
+├── latent_dynamics_linear.py    # Dense fit of Z_t = c + A Z + B Z_x
+├── latent_dynamics_deepymod.py  # DeepMoD-based sparse discovery
+├── latent_dynamics_pdenet.py    # PDE-Net-style discovery with learned derivative kernels
+├── simulate_latent_pde_rk45.py  # Integrate learned latent dynamics and decode
 ├── plot_latent_3d.py            # 3D visualization of latent modes
 ├── reconstruct_e_field.py       # Electric field reconstruction from distributions
 ├── generate_all_e_fields.py     # Batch electric field generation
@@ -92,7 +96,7 @@ python Conv_velocity_AE.py \
 
 ### 2. Discover Latent Dynamics
 
-Two modes of operation are available:
+Four modes of operation are available:
 
 #### A. Full Library Discovery (`latent_dynamics.py`)
 
@@ -126,7 +130,30 @@ python latent_dynamics.py \
 - `<latent-file-stem>_pde_find.npz`: Discovered PDE coefficients and metrics
 - `<latent-file-stem>_pde_find.txt`: Human-readable report
 
-#### B. Compact Library Discovery (`latent_dynamics_compact.py`)
+#### B. Dense Linear Transport Fit (`latent_dynamics_linear.py`)
+
+Fit the coupled model
+`Z_t = c + A Z + B Z_x`
+with a single ridge regression over all latent modes:
+
+```bash
+# Coupled linear transport without constant forcing
+python latent_dynamics_linear.py --latent-file results/velocity_autoencoder_results.npz
+
+# Add a constant term and adjust the ridge strength
+python latent_dynamics_linear.py \
+    --latent-file results/velocity_autoencoder_results.npz \
+    --include-constant \
+    --ridge-alpha 1e-5 \
+    --space-diff Fourier \
+    --time-diff FD
+```
+
+**Output**:
+- `<latent-file-stem>_linear_transport.npz`: Dense linear coefficients and metrics
+- `<latent-file-stem>_linear_transport.txt`: Human-readable report
+
+#### C. Compact Library Discovery (`latent_dynamics_compact.py`)
 
 Fixed library with physically-motivated terms for coupled latent-E-field dynamics:
 
@@ -150,7 +177,40 @@ python latent_dynamics_compact.py \
 - `<latent-file-stem>_compact_pde_find.npz`: Discovered PDE coefficients
 - `<latent-file-stem>_compact_pde_find.txt`: Human-readable report
 
-### 3. Visualize Results
+#### D. PDE-Net-Style Discovery (`latent_dynamics_pdenet.py`)
+
+Inspired by `PDE-Net-2.0`, this script learns spatial derivative filters with 1D circular convolutions and uses a SymNet right-hand side. For interpretability it also fits a post-hoc sparse polynomial proxy to the learned SymNet dynamics.
+
+```bash
+# Coupled latent PDE-Net fit on all modes
+python latent_dynamics_pdenet.py \
+    --latent-file results/velocity_autoencoder_results.npz
+
+# Restrict to a few modes and use a smaller library
+python latent_dynamics_pdenet.py \
+    --latent-file results/velocity_autoencoder_results.npz \
+    --modes 0 1 2 \
+    --diff-order 1 \
+    --poly-order 2 \
+    --kernel-size 5
+```
+
+**Output**:
+- `<latent-file-stem>_pdenet.npz`: Learned kernels, SymNet parameters, symbolic proxy coefficients, and latent rollout prediction
+- `<latent-file-stem>_pdenet.txt`: Human-readable report with a post-hoc symbolic proxy of the learned SymNet
+
+### 3. Decode and Evaluate Learned Dynamics
+
+Use `simulate_latent_pde_rk45.py` to decode discovered latent trajectories back to `f(x, v, t)` and compare them to the Vlasov truth. The same script supports PDE-FIND, DeepMoD, linear transport, and PDE-Net-style outputs.
+
+```bash
+# Evaluate a PDE-Net latent model and decode it with the trained autoencoder
+python simulate_latent_pde_rk45.py \
+    --pde-file results/velocity_autoencoder_results_pdenet.npz \
+    --device cpu
+```
+
+### 4. Visualize Results
 
 **Script**: `plot_latent_3d.py`
 
@@ -205,6 +265,16 @@ The project uses a modified version of the PDE-FIND algorithm (from `tutorials/P
 3. **Compact mode**: Physically-motivated fixed library
    - Library: `[z_i, z_i^x, E, z_i*E, z_i*z_i^x]` for all modes
    - Equation: `∂z_k/∂t = L[z, z_x, E, z*E, z*z_x]`
+
+4. **Linear transport mode**: Dense coupled regression
+   - Library: `[1, z_0, ..., z_{N_z-1}, z_{0,x}, ..., z_{N_z-1,x}]`
+   - Equation: `Z_t = c + A Z + B Z_x`
+   - Solver: ridge regression on the full matrix system
+
+5. **PDE-Net-style mode**: Learned derivative kernels plus sparse symbolic library
+   - Library: polynomial combinations of `[z_i, z_{i,x}, z_{i,xx}, ...]`
+   - Equation: `Z_t = L_theta[Z, Z_x, Z_xx, ...]`
+   - Solver: Adam on derivative filters and coefficients, followed by sparse ridge refit
 
 ## Output Format
 

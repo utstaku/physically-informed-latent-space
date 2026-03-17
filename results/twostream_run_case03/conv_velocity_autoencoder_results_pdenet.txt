@@ -1,0 +1,27 @@
+PDE-Net-style latent dynamics discovery
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results_pdenet.npz
+mode_indices: [0, 1, 2, 3, 4]
+diff_order: 1
+poly_order: 1
+kernel_size: 5
+library_terms: 11
+train_rhs_mse: 2.595233e+01
+val_rhs_mse: 2.595233e+01
+full_rhs_mse: 2.595233e+01
+train_state_mse: 6.488083e-04
+val_state_mse: 6.488083e-04
+full_state_mse: 6.488083e-04
+train_rollout_relative_l2: 1.792366e+00
+val_rollout_relative_l2: 1.792366e+00
+full_rollout_relative_l2: 1.792366e+00
+
+Discovered equations:
+dz0/dt = -1.229573 + 0.885193 * z0 + -1.667479 * z1 + -1.323181 * z2 + 3.731731 * z3 + -1.841188 * z4 + -0.331160 * z0_{x} + 0.068523 * z1_{x} + 0.039479 * z2_{x} + -0.155085 * z3_{x} + 0.360628 * z4_{x}
+dz1/dt = -0.760240 + 0.397243 * z0 + 0.028679 * z1 + -0.049403 * z2 + -1.796500 * z3 + -0.110679 * z4 + -0.048363 * z0_{x} + 0.016665 * z1_{x} + -0.170280 * z2_{x} + 0.776889 * z3_{x} + -0.036998 * z4_{x}
+dz2/dt = -1.285187 + 1.558843 * z0 + 0.632764 * z1 + 0.409339 * z2 + -2.691575 * z3 + 1.484845 * z4 + 0.006875 * z0_{x} + -0.258161 * z1_{x} + -0.091439 * z2_{x} + 0.324793 * z3_{x} + -0.207301 * z4_{x}
+dz3/dt = 0.555348 + -1.650323 * z0 + -3.475102 * z1 + -0.135996 * z2 + 0.042312 * z3 + -1.211678 * z4 + -0.088814 * z0_{x} + 0.633486 * z1_{x} + 0.112401 * z2_{x} + 0.090201 * z3_{x} + 0.062662 * z4_{x}
+dz4/dt = 0.856040 + -1.269344 * z0 + 0.212565 * z1 + -0.020276 * z2 + 2.043799 * z3 + -1.012364 * z4 + 0.258288 * z0_{x} + 0.196565 * z1_{x} + -0.037419 * z2_{x} + -0.070037 * z3_{x} + 0.277616 * z4_{x}
+
+Learned derivative kernels:
+order 1: -4.317416e-01 -8.279738e-01 9.133540e-02 9.480208e-01 3.947354e-01

@@ -11,9 +11,9 @@ k0 = 0.3
 k = 0.3
 N = 64         # x方向のgrid数
 M = 128         # v方向のgrid数(半分)
-Vmax = 6.0     # vの打ち切り速度
-dt = 5e-3       # time step (ω_pe^{-1} units)
-tmax = 10.0    # end time (enough to see at least one recurrence)
+Vmax = 7.0     # vの打ち切り速度
+dt = 2e-3       # time step (ω_pe^{-1} units)
+tmax = 4.0    # end time (enough to see at least one recurrence)
 
 parser = argparse.ArgumentParser(description="Run a Vlasov-Landau simulation.")
 parser.add_argument("outdir", help="Directory to save output data.")

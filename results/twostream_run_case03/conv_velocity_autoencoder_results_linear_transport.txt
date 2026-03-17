@@ -1,0 +1,61 @@
+Linear coupled latent transport fit
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results.npz
+output_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results_linear_transport.npz
+system: coupled
+fit_equation: Z_t = A Z + B Z_x
+ridge_alpha: 1.000000000000e-06
+fit_fraction: 1.000000000000e+00
+fit_steps: 1001
+time_diff: FD
+space_diff: Fourier
+mode_indices: 0 1 2 3 4 5
+library_labels:
+  00: z_0
+  01: z_1
+  02: z_2
+  03: z_3
+  04: z_4
+  05: z_5
+  06: z_0_x
+  07: z_1_x
+  08: z_2_x
+  09: z_3_x
+  10: z_4_x
+  11: z_5_x
+per_mode_metrics:
+- mode 0:
+  fit_relative_l2: 5.320432895418e-01
+  full_relative_l2: 5.320432895418e-01
+  fit_mse: 4.805394721118e+00
+  full_mse: 4.805394721118e+00
+  equation: z_0_t = -1.527677e-01*z_0 -1.841550e+00*z_1 -1.858093e+00*z_2 -4.154109e-01*z_3 -1.089102e-01*z_4 -7.072787e-01*z_5 +2.875117e-01*z_0_x +4.258495e-01*z_1_x -9.379941e-02*z_2_x +1.892554e-01*z_3_x +3.473133e-01*z_4_x +8.856483e-02*z_5_x
+- mode 1:
+  fit_relative_l2: 4.079570214272e-01
+  full_relative_l2: 4.079570214272e-01
+  fit_mse: 5.763093672813e+00
+  full_mse: 5.763093672813e+00
+  equation: z_1_t = +1.686923e+00*z_0 -1.285421e+00*z_1 -1.108954e+00*z_2 -2.001542e+00*z_3 +2.046015e+00*z_4 +6.712378e-01*z_5 +7.293901e-01*z_0_x -1.047791e+00*z_1_x +2.402724e-01*z_2_x -1.770089e-01*z_3_x +1.066468e+00*z_4_x +3.867055e-01*z_5_x
+- mode 2:
+  fit_relative_l2: 5.625109815560e-01
+  full_relative_l2: 5.625109815560e-01
+  fit_mse: 9.345836719345e+00
+  full_mse: 9.345836719345e+00
+  equation: z_2_t = +6.766533e-01*z_0 +4.920795e-01*z_1 +1.018346e+00*z_2 -3.700869e-01*z_3 +1.692677e+00*z_4 +8.583102e-01*z_5 -7.985915e-01*z_0_x +1.141655e+00*z_1_x +7.461070e-01*z_2_x +1.497077e+00*z_3_x -1.581295e+00*z_4_x -7.903814e-01*z_5_x
+- mode 3:
+  fit_relative_l2: 4.633430906895e-01
+  full_relative_l2: 4.633430906895e-01
+  fit_mse: 7.612073153185e+00
+  full_mse: 7.612073153185e+00
+  equation: z_3_t = -4.855141e-01*z_0 +2.825700e+00*z_1 +2.460227e-01*z_2 +7.003568e-01*z_3 +4.555813e-01*z_4 +1.540358e-01*z_5 +3.805357e-01*z_0_x +1.084173e+00*z_1_x +1.689174e+00*z_2_x +4.864370e-01*z_3_x +4.878567e-01*z_4_x +3.139408e-01*z_5_x
+- mode 4:
+  fit_relative_l2: 4.761659008101e-01
+  full_relative_l2: 4.761659008101e-01
+  fit_mse: 5.423653156856e+00
+  full_mse: 5.423653156856e+00
+  equation: z_4_t = -1.241953e-01*z_0 -2.212876e+00*z_1 -1.362890e+00*z_2 -7.284922e-01*z_3 -4.262255e-01*z_4 -8.194803e-01*z_5 +1.865135e-01*z_0_x +9.467470e-01*z_1_x -2.114069e-01*z_2_x +8.470858e-01*z_3_x -2.724967e-01*z_4_x -5.711295e-01*z_5_x
+- mode 5:
+  fit_relative_l2: 6.555059118429e-01
+  full_relative_l2: 6.555059118429e-01
+  fit_mse: 5.316644677768e+00
+  full_mse: 5.316644677768e+00
+  equation: z_5_t = +5.351530e-01*z_0 -8.704854e-01*z_1 +7.111493e-01*z_2 -3.011122e-01*z_3 +7.241649e-01*z_4 +6.777795e-01*z_5 -6.854864e-02*z_0_x +1.304004e-01*z_1_x +8.512013e-02*z_2_x +5.133211e-01*z_3_x -8.353437e-01*z_4_x -5.381988e-01*z_5_x

@@ -201,6 +201,7 @@ def load_autoencoder_from_latent_file(
         latent_dim = int(np.asarray(data["nz"]).item())
         conv_channels = tuple(int(item) for item in np.asarray(data["conv_channels"], dtype=np.int32))
         kernel_size = int(np.asarray(data["kernel_size"]).item())
+        padding_mode = str(np.asarray(data["padding_mode"]).item()) if "padding_mode" in data else "zeros"
         feature_mean = np.asarray(data["feature_mean"], dtype=np.float32)
         feature_std = np.asarray(data["feature_std"], dtype=np.float32)
 
@@ -216,6 +217,7 @@ def load_autoencoder_from_latent_file(
         latent_dim=latent_dim,
         conv_channels=conv_channels,
         kernel_size=kernel_size,
+        padding_mode=padding_mode,
     ).to(device)
     model.load_state_dict(state_dict, strict=True)
     model.eval()

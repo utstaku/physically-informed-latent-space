@@ -5,7 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PYTHON_BIN="${PYTHON_BIN:-/home/uts22/miniconda3/envs/lasdi/bin/python}"
-CASE_DIR=""
+TRUTH_CASE_DIR=""
+OUTPUT_DIR=""
+VALIDATION_CASE_DIR=""
 LATENT_DIM=8
 AE_EPOCHS=50
 AE_TRAIN_FRACTION=0.9
@@ -46,7 +48,6 @@ LINEAR_SG_WINDOW_X=9
 LINEAR_SG_WINDOW_T=9
 LINEAR_SG_POLY_X=3
 LINEAR_SG_POLY_T=3
-SAVE_STRIDE=20
 SYSTEM_MODE="independent"
 DEVICE="auto"
 SOLVER="RK45"
@@ -60,15 +61,17 @@ LATENT_HEATMAP_MODES=""
 
 usage() {
   cat <<EOF
-Usage: $(basename "$0") --case-dir PATH [options]
+Usage: $(basename "$0") --truth-case-dir PATH [options]
 
-Run the Landau pipeline:
-  vlasov_landau.py -> Conv_velocity_AE.py -> latent_dynamics_{deepymod|linear|pdefind|pdenet}.py -> simulate_latent_pde_rk45.py
+Run the Vlasov two-stream pipeline on an existing truth case:
+  Conv_velocity_AE.py -> latent_dynamics_{deepymod|linear|pdefind|pdenet}.py -> simulate_latent_pde_rk45.py
 
 Required:
-  --case-dir PATH           Output case directory for generated data and model files.
+  --truth-case-dir PATH     Case directory containing distribution_full.npz.
 
 Options:
+  --output-dir PATH         Directory for AE/PDE/evaluation outputs. Default: --truth-case-dir
+  --validation-case-dir P   Optional neighboring case used for AE/PDE-Net validation. Default: auto-select neighbor in the same grid
   --python PATH             Python executable to use.
   --latent-dim INT          Latent dimension for Conv_velocity_AE.py. Default: ${LATENT_DIM}
   --ae-epochs INT           AE training epochs. Default: ${AE_EPOCHS}
@@ -115,7 +118,6 @@ Options:
   --linear-sg-window-t INT  Savitzky-Golay window in t for linear dynamics. Default: ${LINEAR_SG_WINDOW_T}
   --linear-sg-poly-x INT    Savitzky-Golay poly degree in x for linear dynamics. Default: ${LINEAR_SG_POLY_X}
   --linear-sg-poly-t INT    Savitzky-Golay poly degree in t for linear dynamics. Default: ${LINEAR_SG_POLY_T}
-  --save-stride INT         Snapshot stride used by vlasov_landau.py. Default: ${SAVE_STRIDE}
   --system MODE             PDE system mode: independent or coupled. Default: ${SYSTEM_MODE}
   --D INT                   Maximum spatial derivative order for latent_dynamics_deepymod.py or latent_dynamics.py. Default: ${PDE_D}
   --P INT                   Maximum polynomial power for latent_dynamics_deepymod.py or latent_dynamics.py. Default: ${PDE_P}
@@ -132,8 +134,16 @@ EOF
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --case-dir)
-      CASE_DIR="$2"
+    --truth-case-dir|--case-dir)
+      TRUTH_CASE_DIR="$2"
+      shift 2
+      ;;
+    --output-dir)
+      OUTPUT_DIR="$2"
+      shift 2
+      ;;
+    --validation-case-dir)
+      VALIDATION_CASE_DIR="$2"
       shift 2
       ;;
     --python)
@@ -300,10 +310,6 @@ while [[ $# -gt 0 ]]; do
       LINEAR_SG_POLY_T="$2"
       shift 2
       ;;
-    --save-stride)
-      SAVE_STRIDE="$2"
-      shift 2
-      ;;
     --system)
       SYSTEM_MODE="$2"
       shift 2
@@ -362,8 +368,8 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ -z "${CASE_DIR}" ]]; then
-  echo "--case-dir is required." >&2
+if [[ -z "${TRUTH_CASE_DIR}" ]]; then
+  echo "--truth-case-dir is required." >&2
   usage >&2
   exit 1
 fi
@@ -423,18 +429,86 @@ if [[ "${DYNAMICS_MODEL}" == "pdenet" && "${SYSTEM_MODE}" != "coupled" ]]; then
   exit 1
 fi
 
-CASE_DIR="$(realpath -m "${CASE_DIR}")"
-LATENT_FILE="${CASE_DIR}/conv_velocity_autoencoder_results.npz"
+TRUTH_CASE_DIR="$(realpath -m "${TRUTH_CASE_DIR}")"
+if [[ ! -f "${TRUTH_CASE_DIR}/distribution_full.npz" ]]; then
+  echo "distribution_full.npz not found in truth case directory: ${TRUTH_CASE_DIR}" >&2
+  exit 1
+fi
+
+if [[ -z "${OUTPUT_DIR}" ]]; then
+  OUTPUT_DIR="${TRUTH_CASE_DIR}"
+fi
+OUTPUT_DIR="$(realpath -m "${OUTPUT_DIR}")"
+
+LATENT_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results.npz"
+VALIDATION_LATENT_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results_validation.npz"
 if [[ "${DYNAMICS_MODEL}" == "linear" ]]; then
-  PDE_FILE="${CASE_DIR}/conv_velocity_autoencoder_results_linear_transport.npz"
+  PDE_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results_linear_transport.npz"
 elif [[ "${DYNAMICS_MODEL}" == "pdefind" ]]; then
-  PDE_FILE="${CASE_DIR}/conv_velocity_autoencoder_results_pde_find.npz"
+  PDE_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results_pde_find.npz"
 elif [[ "${DYNAMICS_MODEL}" == "pdenet" ]]; then
-  PDE_FILE="${CASE_DIR}/conv_velocity_autoencoder_results_pdenet.npz"
+  PDE_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results_pdenet.npz"
 elif [[ "${SYSTEM_MODE}" == "coupled" ]]; then
-  PDE_FILE="${CASE_DIR}/conv_velocity_autoencoder_results_deepymod_coupled.npz"
+  PDE_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results_deepymod_coupled.npz"
 else
-  PDE_FILE="${CASE_DIR}/conv_velocity_autoencoder_results_deepymod.npz"
+  PDE_FILE="${OUTPUT_DIR}/conv_velocity_autoencoder_results_deepymod.npz"
+fi
+
+resolve_neighbor_case_dir() {
+  local truth_case_dir="$1"
+  "${PYTHON_BIN}" - "$truth_case_dir" <<'PY'
+import math
+import re
+import sys
+from pathlib import Path
+
+truth = Path(sys.argv[1]).resolve()
+parent = truth.parent
+pattern = re.compile(r"^T_([0-9]+\.[0-9]+)_k_([0-9]+\.[0-9]+)$")
+match = pattern.fullmatch(truth.name)
+if match is None:
+    raise SystemExit("")
+truth_t = float(match.group(1))
+truth_k = float(match.group(2))
+
+candidates = []
+for path in sorted(parent.iterdir()):
+    if not path.is_dir() or path == truth:
+        continue
+    match = pattern.fullmatch(path.name)
+    if match is None:
+        continue
+    t_val = float(match.group(1))
+    k_val = float(match.group(2))
+    same_k = math.isclose(k_val, truth_k, rel_tol=0.0, abs_tol=1e-12)
+    same_t = math.isclose(t_val, truth_t, rel_tol=0.0, abs_tol=1e-12)
+    rank = (
+        0 if same_k else 1 if same_t else 2,
+        abs(t_val - truth_t) if same_k else abs(k_val - truth_k) if same_t else math.hypot(t_val - truth_t, k_val - truth_k),
+        0 if t_val > truth_t else 1,
+        0 if k_val > truth_k else 1,
+        path.name,
+    )
+    candidates.append((rank, path))
+
+if not candidates:
+    raise SystemExit("")
+
+print(min(candidates, key=lambda item: item[0])[1].resolve())
+PY
+}
+
+if [[ -n "${VALIDATION_CASE_DIR}" ]]; then
+  VALIDATION_CASE_DIR="$(realpath -m "${VALIDATION_CASE_DIR}")"
+else
+  VALIDATION_CASE_DIR="$(resolve_neighbor_case_dir "${TRUTH_CASE_DIR}")"
+fi
+
+if [[ -n "${VALIDATION_CASE_DIR}" ]]; then
+  if [[ ! -f "${VALIDATION_CASE_DIR}/distribution_full.npz" ]]; then
+    echo "validation distribution_full.npz not found: ${VALIDATION_CASE_DIR}" >&2
+    exit 1
+  fi
 fi
 
 resolve_sim_device() {
@@ -464,34 +538,35 @@ run_cmd() {
   "$@"
 }
 
-mkdir -p "${CASE_DIR}"
+mkdir -p "${OUTPUT_DIR}"
 
-run_cmd \
-  "${PYTHON_BIN}" \
-  "${SCRIPT_DIR}/vlasov_landau.py" \
-  "${CASE_DIR}" \
-  --save-stride "${SAVE_STRIDE}"
-
-run_cmd \
-  "${PYTHON_BIN}" \
-  "${SCRIPT_DIR}/Conv_velocity_AE.py" \
-  --case-dir "${CASE_DIR}" \
-  --latent-dim "${LATENT_DIM}" \
-  --epochs "${AE_EPOCHS}" \
-  --train-fraction "${AE_TRAIN_FRACTION}" \
-  --f0-epsilon "${AE_F0_EPSILON}" \
-  --density-weight "${AE_DENSITY_WEIGHT}" \
-  --electric-weight "${AE_ELECTRIC_WEIGHT}" \
-  --vlasov-residual-weight "${AE_VLASOV_RESIDUAL_WEIGHT}" \
-  --device "${DEVICE}" \
+AE_ARGS=(
+  "${PYTHON_BIN}"
+  "${SCRIPT_DIR}/Conv_velocity_AE.py"
+  --case-dir "${TRUTH_CASE_DIR}"
+  --latent-dim "${LATENT_DIM}"
+  --epochs "${AE_EPOCHS}"
+  --train-fraction "${AE_TRAIN_FRACTION}"
+  --f0-epsilon "${AE_F0_EPSILON}"
+  --density-weight "${AE_DENSITY_WEIGHT}"
+  --electric-weight "${AE_ELECTRIC_WEIGHT}"
+  --vlasov-residual-weight "${AE_VLASOV_RESIDUAL_WEIGHT}"
+  --device "${DEVICE}"
   --output "${LATENT_FILE}"
+)
+
+if [[ -n "${VALIDATION_CASE_DIR}" ]]; then
+  AE_ARGS+=(--validation-case-dir "${VALIDATION_CASE_DIR}" --validation-output "${VALIDATION_LATENT_FILE}")
+fi
+
+run_cmd "${AE_ARGS[@]}"
 
 if [[ "${PLOT_LATENT_HEATMAP}" -eq 1 ]]; then
   LATENT_HEATMAP_ARGS=(
     "${PYTHON_BIN}"
     "${SCRIPT_DIR}/plot_latent_heatmap.py"
     --latent-file "${LATENT_FILE}"
-    --output "${CASE_DIR}/conv_velocity_autoencoder_results_heatmap.png"
+    --output "${OUTPUT_DIR}/conv_velocity_autoencoder_results_heatmap.png"
   )
   if [[ -n "${LATENT_HEATMAP_MODES}" ]]; then
     read -r -a LATENT_HEATMAP_MODE_ARRAY <<< "${LATENT_HEATMAP_MODES}"
@@ -580,6 +655,10 @@ elif [[ "${DYNAMICS_MODEL}" == "pdenet" ]]; then
     PDENET_ARGS+=(--rollout-loss-weights "${PDENET_ROLLOUT_LOSS_WEIGHTS}")
   fi
 
+  if [[ -n "${VALIDATION_CASE_DIR}" ]]; then
+    PDENET_ARGS+=(--validation-latent-file "${VALIDATION_LATENT_FILE}")
+  fi
+
   if [[ "${NO_ELECTRIC_FIELD}" -eq 1 ]]; then
     PDENET_ARGS+=(--no-electric-field)
   fi
@@ -625,7 +704,7 @@ SIM_ARGS=(
   "${SCRIPT_DIR}/simulate_latent_pde_rk45.py"
   --pde-file "${PDE_FILE}"
   --latent-file "${LATENT_FILE}"
-  --case-dir "${CASE_DIR}"
+  --case-dir "${TRUTH_CASE_DIR}"
   --solver "${SOLVER}"
   --device "${SIM_DEVICE}"
 )
@@ -638,7 +717,8 @@ run_cmd "${SIM_ARGS[@]}"
 
 echo
 echo "Pipeline finished."
-echo "case_dir=${CASE_DIR}"
+echo "truth_case_dir=${TRUTH_CASE_DIR}"
+echo "output_dir=${OUTPUT_DIR}"
 echo "latent_file=${LATENT_FILE}"
 echo "pde_file=${PDE_FILE}"
 echo "dynamics_model=${DYNAMICS_MODEL}"

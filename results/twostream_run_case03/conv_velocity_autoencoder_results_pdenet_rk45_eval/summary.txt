@@ -1,0 +1,20 @@
+pde_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results_pdenet.npz
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results.npz
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/vlasov_twostream_param_grid/T_1.00_k_1.00
+system_mode: coupled
+space_diff: learned-conv
+model_family: pdenet
+used_electric_field: False
+mode_indices: [0, 1, 2, 3, 4]
+solver: PDE-Net
+rk4_substeps: 1
+fill_unmodeled: truth
+solver_success: True
+solver_message: Used stored/reconstructed PDE-Net latent rollout.
+solver_nfev: 0
+solver_mean_relative_l2: 3.943992210320e-01
+solver_max_relative_l2: 6.027568479854e-01
+solver_final_relative_l2: 6.027568479854e-01
+ae_mean_relative_l2: 2.246581189340e-02
+ae_max_relative_l2: 5.233599602131e-02
+ae_final_relative_l2: 4.840574848254e-02

@@ -41,6 +41,15 @@ def parse_args() -> argparse.Namespace:
         help="Specific case directory. If omitted, the first case in sorted order is used.",
     )
     parser.add_argument(
+        "--validation-case-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional case directory used only for validation. If provided, validation loss is "
+            "computed on this neighboring case instead of holding out samples from --case-dir."
+        ),
+    )
+    parser.add_argument(
         "--latent-dim",
         type=int,
         default=8,
@@ -63,6 +72,19 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=5,
         help="Odd kernel size used in all convolutional encoder/decoder layers.",
+    )
+    parser.add_argument(
+        "--padding-mode",
+        type=str,
+        default="zeros",
+        choices=("zeros", "replicate", "reflect"),
+        help="Padding mode used in encoder Conv1d layers along the v direction.",
+    )
+    parser.add_argument(
+        "--f0-epsilon",
+        type=float,
+        default=1e-3,
+        help="Positive epsilon used in the relative target (f - f0) / (f0 + epsilon).",
     )
     parser.add_argument("--epochs", type=int, default=50, help="Training epochs.")
     parser.add_argument(
@@ -134,6 +156,15 @@ def parse_args() -> argparse.Namespace:
         help="Output .pt path for an encoder-only checkpoint. Defaults to <output-stem>_encoder.pt.",
     )
     parser.add_argument(
+        "--validation-output",
+        type=Path,
+        default=None,
+        help=(
+            "Optional .npz path where the latent trajectory of --validation-case-dir is saved using "
+            "the trained autoencoder and training-case normalization."
+        ),
+    )
+    parser.add_argument(
         "--save-reconstruction",
         action="store_true",
         help="Save reconstructed f(t, x, v) in the output file.",
@@ -143,6 +174,18 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.0,
         help="Weight for an auxiliary density reconstruction loss on n(x, t) = integral f dv.",
+    )
+    parser.add_argument(
+        "--electric-weight",
+        type=float,
+        default=0.0,
+        help="Weight for an auxiliary electric-field reconstruction loss on E(x, t) recovered from Poisson's equation.",
+    )
+    parser.add_argument(
+        "--vlasov-residual-weight",
+        type=float,
+        default=0.0,
+        help="Weight for a Vlasov residual loss on reconstructed f using f_t + v f_x + E f_v.",
     )
     parser.add_argument(
         "--smoothness-weight",
@@ -253,6 +296,24 @@ def flatten_snapshots(f_t_x_v: np.ndarray) -> np.ndarray:
     return f_t_x_v.reshape(nt * nx, nv)
 
 
+def estimate_reference_profile(f_t_x_v: np.ndarray) -> np.ndarray:
+    if f_t_x_v.ndim != 3:
+        raise ValueError(f"Expected f_t_x_v to have shape (Nt, Nx, Nv), got {f_t_x_v.shape}")
+    return np.asarray(f_t_x_v[0].mean(axis=0), dtype=np.float32)
+
+
+def reference_profile_scale(f0_v: np.ndarray, epsilon: float) -> np.ndarray:
+    if epsilon <= 0.0:
+        raise ValueError(f"f0_epsilon must be positive, got {epsilon}")
+    return np.asarray(f0_v, dtype=np.float32) + np.float32(epsilon)
+
+
+def relative_reference_target(f_t_x_v: np.ndarray, f0_v: np.ndarray, epsilon: float) -> np.ndarray:
+    profile = np.asarray(f0_v, dtype=np.float32).reshape(1, 1, -1)
+    scale = reference_profile_scale(f0_v, epsilon).reshape(1, 1, -1)
+    return (np.asarray(f_t_x_v, dtype=np.float32) - profile) / scale
+
+
 def split_indices(
     num_samples: int,
     train_fraction: float,
@@ -284,6 +345,17 @@ def normalize_from_train(
     std = np.where(std < 1e-6, 1.0, std)
     normalized = (samples - mean) / std
     return normalized.astype(np.float32), mean.astype(np.float32), std.astype(np.float32)
+
+
+def apply_normalization(
+    samples: np.ndarray,
+    mean: np.ndarray,
+    std: np.ndarray,
+) -> np.ndarray:
+    normalized = (np.asarray(samples, dtype=np.float32) - np.asarray(mean, dtype=np.float32)) / np.asarray(
+        std, dtype=np.float32
+    )
+    return normalized.astype(np.float32)
 
 
 def set_seed(seed: int) -> None:
@@ -324,16 +396,20 @@ class ConvVelocityAutoencoder(nn.Module):
         latent_dim: int,
         conv_channels: Sequence[int],
         kernel_size: int,
+        padding_mode: str = "zeros",
     ) -> None:
         super().__init__()
         if kernel_size <= 0 or kernel_size % 2 == 0:
             raise ValueError(f"kernel_size must be a positive odd integer, got {kernel_size}")
+        if padding_mode not in {"zeros", "replicate", "reflect"}:
+            raise ValueError(f"Unsupported padding_mode: {padding_mode}")
 
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.latent_dim = latent_dim
         self.conv_channels = tuple(int(channel) for channel in conv_channels)
         self.kernel_size = kernel_size
+        self.padding_mode = padding_mode
 
         padding = kernel_size // 2
         stride = 2
@@ -350,6 +426,7 @@ class ConvVelocityAutoencoder(nn.Module):
                         kernel_size=kernel_size,
                         stride=stride,
                         padding=padding,
+                        padding_mode=padding_mode,
                     ),
                     activation(),
                 )
@@ -464,6 +541,17 @@ def sample_regularization_patch(
     return np.ascontiguousarray(sample_grid[start_t : start_t + patch_nt, start_x : start_x + patch_nx, :])
 
 
+def sample_time_patch(
+    sample_grid: np.ndarray,
+    time_window: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    nt, _nx, _nv = sample_grid.shape
+    patch_nt = min(max(time_window, 1), nt)
+    start_t = int(rng.integers(0, nt - patch_nt + 1))
+    return np.ascontiguousarray(sample_grid[start_t : start_t + patch_nt, :, :])
+
+
 def encode_patch(model: ConvVelocityAutoencoder, patch: torch.Tensor) -> torch.Tensor:
     nt_patch, nx_patch, nv = patch.shape
     flattened = patch.reshape(nt_patch * nx_patch, nv).unsqueeze(1)
@@ -550,17 +638,25 @@ def compute_regularization_loss(
     reg_time_window: int,
     reg_x_window: int,
     reg_patches_per_epoch: int,
+    electric_weight: float,
+    vlasov_residual_weight: float,
+    feature_mean: torch.Tensor,
+    feature_std: torch.Tensor,
+    density_weights: torch.Tensor,
+    v_coords: torch.Tensor,
     device: torch.device,
     rng: np.random.Generator,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     total_loss = torch.zeros((), device=device)
     smoothness_loss_total = torch.zeros((), device=device)
     dynamics_loss_total = torch.zeros((), device=device)
+    electric_loss_total = torch.zeros((), device=device)
+    vlasov_residual_total = torch.zeros((), device=device)
 
     if reg_patches_per_epoch <= 0:
-        return total_loss, smoothness_loss_total, dynamics_loss_total
-    if smoothness_weight <= 0.0 and dynamics_weight <= 0.0:
-        return total_loss, smoothness_loss_total, dynamics_loss_total
+        return total_loss, smoothness_loss_total, dynamics_loss_total, electric_loss_total, vlasov_residual_total
+    if smoothness_weight <= 0.0 and dynamics_weight <= 0.0 and electric_weight <= 0.0 and vlasov_residual_weight <= 0.0:
+        return total_loss, smoothness_loss_total, dynamics_loss_total, electric_loss_total, vlasov_residual_total
 
     for _ in range(reg_patches_per_epoch):
         patch_np = sample_regularization_patch(
@@ -590,8 +686,48 @@ def compute_regularization_loss(
         smoothness_loss_total = smoothness_loss_total + smoothness_loss
         dynamics_loss_total = dynamics_loss_total + dynamics_loss
 
+        if electric_weight > 0.0 or vlasov_residual_weight > 0.0:
+            electric_patch_np = sample_time_patch(
+                sample_grid=sample_grid,
+                time_window=reg_time_window,
+                rng=rng,
+            )
+            electric_patch = torch.from_numpy(electric_patch_np).to(device=device, dtype=torch.float32)
+            nt_patch, nx_patch, nv = electric_patch.shape
+            flattened = electric_patch.reshape(nt_patch * nx_patch, nv).unsqueeze(1)
+            recon_patch = model(flattened).squeeze(1).reshape(nt_patch, nx_patch, nv)
+            if electric_weight > 0.0:
+                electric_loss = compute_electric_field_loss(
+                    recon=recon_patch,
+                    batch=electric_patch,
+                    feature_mean=feature_mean,
+                    feature_std=feature_std,
+                    density_weights=density_weights,
+                    dx=dx,
+                )
+                total_loss = total_loss + electric_weight * electric_loss
+                electric_loss_total = electric_loss_total + electric_loss
+            if vlasov_residual_weight > 0.0:
+                residual_loss = compute_vlasov_residual_loss(
+                    recon=recon_patch,
+                    feature_mean=feature_mean,
+                    feature_std=feature_std,
+                    density_weights=density_weights,
+                    dt=dt,
+                    dx=dx,
+                    v_coords=v_coords,
+                )
+                total_loss = total_loss + vlasov_residual_weight * residual_loss
+                vlasov_residual_total = vlasov_residual_total + residual_loss
+
     scale = 1.0 / float(reg_patches_per_epoch)
-    return total_loss * scale, smoothness_loss_total * scale, dynamics_loss_total * scale
+    return (
+        total_loss * scale,
+        smoothness_loss_total * scale,
+        dynamics_loss_total * scale,
+        electric_loss_total * scale,
+        vlasov_residual_total * scale,
+    )
 
 
 def compute_density_loss(
@@ -606,6 +742,66 @@ def compute_density_loss(
     recon_density = torch.sum(recon_phys * density_weights, dim=-1)
     batch_density = torch.sum(batch_phys * density_weights, dim=-1)
     return torch.mean((recon_density - batch_density) ** 2)
+
+
+def compute_electric_field_loss(
+    recon: torch.Tensor,
+    batch: torch.Tensor,
+    feature_mean: torch.Tensor,
+    feature_std: torch.Tensor,
+    density_weights: torch.Tensor,
+    dx: float,
+) -> torch.Tensor:
+    recon_phys = recon * feature_std + feature_mean
+    batch_phys = batch * feature_std + feature_mean
+
+    recon_density = torch.sum(recon_phys * density_weights, dim=-1)
+    batch_density = torch.sum(batch_phys * density_weights, dim=-1)
+
+    recon_e = electric_field_from_density(recon_density, dx=dx)
+    batch_e = electric_field_from_density(batch_density, dx=dx)
+    return torch.mean((recon_e - batch_e) ** 2)
+
+
+def electric_field_from_density(density: torch.Tensor, dx: float) -> torch.Tensor:
+    rho = density - density.mean(dim=1, keepdim=True)
+
+    nx = rho.shape[1]
+    k = 2.0 * np.pi * torch.fft.fftfreq(nx, d=dx, device=rho.device, dtype=rho.dtype)
+    nonzero = k != 0.0
+
+    rho_hat = torch.fft.fft(rho, dim=1)
+    e_hat = torch.zeros_like(rho_hat)
+    e_hat[:, nonzero] = -rho_hat[:, nonzero] / (1j * k[nonzero])
+    return torch.fft.ifft(e_hat, dim=1).real
+
+
+def compute_vlasov_residual_loss(
+    recon: torch.Tensor,
+    feature_mean: torch.Tensor,
+    feature_std: torch.Tensor,
+    density_weights: torch.Tensor,
+    dt: float,
+    dx: float,
+    v_coords: torch.Tensor,
+) -> torch.Tensor:
+    nt, nx, nv = recon.shape
+    if nt < 3 or nx < 3 or nv < 3:
+        return recon.new_zeros(())
+
+    recon_phys = recon * feature_std + feature_mean
+    density = torch.sum(recon_phys * density_weights, dim=-1)
+    electric = electric_field_from_density(density, dx=dx)
+
+    f_center = recon_phys[1:-1, :, 1:-1]
+    f_t = (recon_phys[2:, :, 1:-1] - recon_phys[:-2, :, 1:-1]) / (2.0 * dt)
+    f_x = (torch.roll(f_center, shifts=-1, dims=1) - torch.roll(f_center, shifts=1, dims=1)) / (2.0 * dx)
+    v_spacing = (v_coords[2:] - v_coords[:-2]).view(1, 1, -1)
+    f_v = (recon_phys[1:-1, :, 2:] - recon_phys[1:-1, :, :-2]) / v_spacing
+    electric_center = electric[1:-1, :, None]
+    v_center = v_coords[1:-1].view(1, 1, -1)
+    residual = f_t + v_center * f_x + electric_center * f_v
+    return torch.mean(residual**2)
 
 
 @torch.no_grad()
@@ -640,14 +836,52 @@ def evaluate_loss(
     return total_loss / max(total_count, 1)
 
 
+@torch.no_grad()
+def evaluate_electric_field_loss_on_grid(
+    model: ConvVelocityAutoencoder,
+    sample_grid: np.ndarray,
+    feature_mean: torch.Tensor,
+    feature_std: torch.Tensor,
+    density_weights: torch.Tensor,
+    dx: float,
+    batch_size: int,
+    device: torch.device,
+) -> float:
+    model.eval()
+    nt, nx, nv = sample_grid.shape
+    time_chunk = max(1, batch_size // max(nx, 1))
+    total_loss = 0.0
+    total_count = 0
+
+    for start in range(0, nt, time_chunk):
+        stop = min(start + time_chunk, nt)
+        patch = torch.from_numpy(sample_grid[start:stop]).to(device=device, dtype=torch.float32)
+        flattened = patch.reshape((stop - start) * nx, nv).unsqueeze(1)
+        recon = model(flattened).squeeze(1).reshape(stop - start, nx, nv)
+        loss = compute_electric_field_loss(
+            recon=recon,
+            batch=patch,
+            feature_mean=feature_mean,
+            feature_std=feature_std,
+            density_weights=density_weights,
+            dx=dx,
+        )
+        total_loss += float(loss.item()) * (stop - start)
+        total_count += stop - start
+
+    return total_loss / max(total_count, 1)
+
+
 def train_autoencoder(
     train_samples: np.ndarray,
     val_samples: np.ndarray,
     samples_grid: np.ndarray,
+    validation_grid: np.ndarray | None,
     latent_dim: int,
     hidden_dim: int,
     conv_channels: Sequence[int],
     kernel_size: int,
+    padding_mode: str,
     epochs: int,
     batch_size: int,
     learning_rate: float,
@@ -666,18 +900,32 @@ def train_autoencoder(
     reg_x_window: int,
     reg_patches_per_epoch: int,
     density_weight: float,
+    electric_weight: float,
+    vlasov_residual_weight: float,
     feature_mean: np.ndarray,
     feature_std: np.ndarray,
     density_weights: np.ndarray,
+    v_coords: np.ndarray,
     seed: int,
     device: torch.device,
-) -> Tuple[ConvVelocityAutoencoder, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+ ) -> Tuple[
+    ConvVelocityAutoencoder,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+]:
     model = ConvVelocityAutoencoder(
         input_dim=train_samples.shape[1],
         hidden_dim=hidden_dim,
         latent_dim=latent_dim,
         conv_channels=conv_channels,
         kernel_size=kernel_size,
+        padding_mode=padding_mode,
     ).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = None
@@ -693,6 +941,7 @@ def train_autoencoder(
     feature_mean_tensor = torch.as_tensor(feature_mean.reshape(1, 1, -1), dtype=torch.float32, device=device)
     feature_std_tensor = torch.as_tensor(feature_std.reshape(1, 1, -1), dtype=torch.float32, device=device)
     density_weights_tensor = torch.as_tensor(density_weights.reshape(1, 1, -1), dtype=torch.float32, device=device)
+    v_coords_tensor = torch.as_tensor(v_coords, dtype=torch.float32, device=device)
 
     train_loader = build_dataloader(train_samples, batch_size=batch_size, shuffle=True)
     eval_train_loader = build_dataloader(train_samples, batch_size=batch_size, shuffle=False)
@@ -703,6 +952,9 @@ def train_autoencoder(
     lr_history = []
     smoothness_history = []
     dynamics_history = []
+    electric_history = []
+    vlasov_residual_history = []
+    validation_electric_history = []
     rng = np.random.default_rng(seed)
 
     for epoch in range(epochs):
@@ -725,9 +977,11 @@ def train_autoencoder(
 
         epoch_smoothness = 0.0
         epoch_dynamics = 0.0
-        if smoothness_weight > 0.0 or dynamics_weight > 0.0:
+        epoch_electric = 0.0
+        epoch_vlasov_residual = 0.0
+        if smoothness_weight > 0.0 or dynamics_weight > 0.0 or electric_weight > 0.0 or vlasov_residual_weight > 0.0:
             optimizer.zero_grad(set_to_none=True)
-            reg_loss, smoothness_loss, dynamics_loss = compute_regularization_loss(
+            reg_loss, smoothness_loss, dynamics_loss, electric_loss, residual_loss = compute_regularization_loss(
                 model=model,
                 sample_grid=samples_grid,
                 dt=dt,
@@ -740,6 +994,12 @@ def train_autoencoder(
                 reg_time_window=reg_time_window,
                 reg_x_window=reg_x_window,
                 reg_patches_per_epoch=reg_patches_per_epoch,
+                electric_weight=electric_weight,
+                vlasov_residual_weight=vlasov_residual_weight,
+                feature_mean=feature_mean_tensor,
+                feature_std=feature_std_tensor,
+                density_weights=density_weights_tensor,
+                v_coords=v_coords_tensor,
                 device=device,
                 rng=rng,
             )
@@ -748,6 +1008,8 @@ def train_autoencoder(
                 optimizer.step()
                 epoch_smoothness = float(smoothness_loss.detach().cpu().item())
                 epoch_dynamics = float(dynamics_loss.detach().cpu().item())
+                epoch_electric = float(electric_loss.detach().cpu().item())
+                epoch_vlasov_residual = float(residual_loss.detach().cpu().item())
 
         train_loss = evaluate_loss(
             model,
@@ -767,6 +1029,19 @@ def train_autoencoder(
             feature_std_tensor,
             density_weights_tensor,
         )
+        validation_electric = 0.0
+        if electric_weight > 0.0:
+            validation_electric = evaluate_electric_field_loss_on_grid(
+                model=model,
+                sample_grid=samples_grid if validation_grid is None else validation_grid,
+                feature_mean=feature_mean_tensor,
+                feature_std=feature_std_tensor,
+                density_weights=density_weights_tensor,
+                dx=dx,
+                batch_size=batch_size,
+                device=device,
+            )
+            val_loss = val_loss + electric_weight * validation_electric
         if scheduler is not None:
             scheduler.step(val_loss)
         current_lr = float(optimizer.param_groups[0]["lr"])
@@ -775,10 +1050,15 @@ def train_autoencoder(
         lr_history.append(current_lr)
         smoothness_history.append(epoch_smoothness)
         dynamics_history.append(epoch_dynamics)
+        electric_history.append(epoch_electric)
+        vlasov_residual_history.append(epoch_vlasov_residual)
+        validation_electric_history.append(validation_electric)
         print(
             f"Epoch {epoch + 1:03d}/{epochs:03d} "
             f"train_obj={train_loss:.6e} val_obj={val_loss:.6e} "
-            f"smooth={epoch_smoothness:.6e} dyn={epoch_dynamics:.6e} lr={current_lr:.6e}"
+            f"smooth={epoch_smoothness:.6e} dyn={epoch_dynamics:.6e} "
+            f"elec={epoch_electric:.6e} vlasov={epoch_vlasov_residual:.6e} "
+            f"val_elec={validation_electric:.6e} lr={current_lr:.6e}"
         )
 
     return (
@@ -788,6 +1068,9 @@ def train_autoencoder(
         np.asarray(lr_history, dtype=np.float32),
         np.asarray(smoothness_history, dtype=np.float32),
         np.asarray(dynamics_history, dtype=np.float32),
+        np.asarray(electric_history, dtype=np.float32),
+        np.asarray(vlasov_residual_history, dtype=np.float32),
+        np.asarray(validation_electric_history, dtype=np.float32),
     )
 
 
@@ -876,6 +1159,9 @@ def save_encoder_checkpoint(
     model: ConvVelocityAutoencoder,
     mean: np.ndarray,
     std: np.ndarray,
+    f0_v: np.ndarray,
+    f0_scale_v: np.ndarray,
+    f0_epsilon: float,
     v: np.ndarray,
     x: np.ndarray,
     t: np.ndarray,
@@ -890,11 +1176,16 @@ def save_encoder_checkpoint(
         "latent_dim": model.latent_dim,
         "conv_channels": tuple(model.conv_channels),
         "kernel_size": model.kernel_size,
+        "padding_mode": model.padding_mode,
         "feature_lengths": tuple(model.feature_lengths),
         "encoded_channels": model.encoded_channels,
         "encoded_length": model.encoded_length,
         "feature_mean": torch.from_numpy(mean.astype(np.float32)),
         "feature_std": torch.from_numpy(std.astype(np.float32)),
+        "f0_v": torch.from_numpy(f0_v.astype(np.float32)),
+        "f0_scale_v": torch.from_numpy(f0_scale_v.astype(np.float32)),
+        "f0_epsilon": np.float32(f0_epsilon),
+        "training_target": "relative_f_minus_f0",
         "v": torch.from_numpy(v.astype(np.float32)),
         "x": torch.from_numpy(x.astype(np.float32)),
         "t": torch.from_numpy(t.astype(np.float32)),
@@ -915,11 +1206,17 @@ def save_results(
     latent: np.ndarray,
     mean: np.ndarray,
     std: np.ndarray,
+    f0_v: np.ndarray,
+    f0_scale_v: np.ndarray,
+    f0_epsilon: float,
     train_losses: np.ndarray,
     val_losses: np.ndarray,
     lr_history: np.ndarray,
     smoothness_history: np.ndarray,
     dynamics_history: np.ndarray,
+    electric_history: np.ndarray,
+    vlasov_residual_history: np.ndarray,
+    validation_electric_history: np.ndarray,
     model: ConvVelocityAutoencoder,
     device: torch.device,
     args: argparse.Namespace,
@@ -941,13 +1238,21 @@ def save_results(
         "latent": latent,
         "feature_mean": mean.astype(np.float32),
         "feature_std": std.astype(np.float32),
+        "f0_v": f0_v.astype(np.float32),
+        "f0_scale_v": f0_scale_v.astype(np.float32),
+        "f0_epsilon": np.asarray(f0_epsilon, dtype=np.float32),
+        "training_target": np.asarray("relative_f_minus_f0"),
         "train_losses": train_losses,
         "val_losses": val_losses,
         "learning_rate_history": lr_history,
         "smoothness_history": smoothness_history,
         "dynamics_history": dynamics_history,
+        "electric_history": electric_history,
+        "vlasov_residual_history": vlasov_residual_history,
+        "validation_electric_history": validation_electric_history,
         "conv_channels": np.asarray(model.conv_channels, dtype=np.int32),
         "kernel_size": np.asarray(model.kernel_size, dtype=np.int32),
+        "padding_mode": np.asarray(model.padding_mode),
         "hidden_dim": np.asarray(model.hidden_dim, dtype=np.int32),
         "feature_lengths": np.asarray(model.feature_lengths, dtype=np.int32),
         "smoothness_weight": np.asarray(args.smoothness_weight, dtype=np.float32),
@@ -956,6 +1261,8 @@ def save_results(
         "dynamics_weight": np.asarray(args.dynamics_weight, dtype=np.float32),
         "dynamics_ridge": np.asarray(args.dynamics_ridge, dtype=np.float32),
         "density_weight": np.asarray(args.density_weight, dtype=np.float32),
+        "electric_weight": np.asarray(args.electric_weight, dtype=np.float32),
+        "vlasov_residual_weight": np.asarray(args.vlasov_residual_weight, dtype=np.float32),
         "reg_time_window": np.asarray(args.reg_time_window, dtype=np.int32),
         "reg_x_window": np.asarray(args.reg_x_window, dtype=np.int32),
         "reg_patches_per_epoch": np.asarray(args.reg_patches_per_epoch, dtype=np.int32),
@@ -970,6 +1277,29 @@ def save_results(
     np.savez_compressed(output_path, **payload)
 
 
+def save_latent_only_results(
+    output_path: Path,
+    case_dir: Path,
+    t: np.ndarray,
+    x: np.ndarray,
+    latent: np.ndarray,
+    train_case_dir: Path,
+) -> None:
+    payload: Dict[str, np.ndarray] = {
+        "case_name": np.asarray(case_dir.name),
+        "case_dir": np.asarray(str(case_dir)),
+        "train_case_dir": np.asarray(str(train_case_dir)),
+        "t": np.asarray(t, dtype=np.float32),
+        "x": np.asarray(x, dtype=np.float32),
+        "nt": np.asarray(latent.shape[0], dtype=np.int32),
+        "nx": np.asarray(latent.shape[1], dtype=np.int32),
+        "nz": np.asarray(latent.shape[2], dtype=np.int32),
+        "latent": np.asarray(latent, dtype=np.float32),
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(output_path, **payload)
+
+
 def main() -> None:
     args = parse_args()
     conv_channels = parse_conv_channels(args.conv_channels)
@@ -979,33 +1309,81 @@ def main() -> None:
     case_dir = resolve_case_dir(args.grid_dir, args.case_dir)
     f_t_x_v, t, x, v = load_distribution(case_dir)
     nt, nx, nv = f_t_x_v.shape
+    validation_case_dir = args.validation_case_dir.resolve() if args.validation_case_dir is not None else None
+    validation_output_path = args.validation_output.resolve() if args.validation_output is not None else None
 
     print(f"Using case: {case_dir}")
     print(f"Loaded f with shape (Nt, Nx, Nv)=({nt}, {nx}, {nv})")
+    if validation_case_dir is not None:
+        print(f"Using validation case: {validation_case_dir}")
     print(f"Using torch device: {device}")
     print(f"Conv channels: {conv_channels}")
     print(f"Kernel size: {args.kernel_size}")
+    print(f"Padding mode: {args.padding_mode}")
+    print(f"f0 epsilon: {args.f0_epsilon}")
 
-    samples = flatten_snapshots(f_t_x_v)
+    f0_v = estimate_reference_profile(f_t_x_v)
+    f0_scale_v = reference_profile_scale(f0_v, args.f0_epsilon)
+    transformed_t_x_v = relative_reference_target(f_t_x_v, f0_v, args.f0_epsilon)
+    samples = flatten_snapshots(transformed_t_x_v)
     rng = np.random.default_rng(args.seed)
-    train_idx, val_idx = split_indices(len(samples), args.train_fraction, rng)
-    samples_norm, mean, std = normalize_from_train(samples, train_idx)
+    if validation_case_dir is None:
+        train_idx, val_idx = split_indices(len(samples), args.train_fraction, rng)
+    else:
+        train_idx = np.arange(len(samples), dtype=np.int64)
+        val_idx = train_idx.copy()
+    samples_norm, transformed_mean, transformed_std = normalize_from_train(samples, train_idx)
+    mean = transformed_mean * f0_scale_v.reshape(1, -1) + f0_v.reshape(1, -1)
+    std = transformed_std * f0_scale_v.reshape(1, -1)
     samples_grid = reshape_sample_grid(samples_norm, nt=nt, nx=nx)
+    validation_grid = None
     density_weights = trapezoid_weights(v)
     dt = float(np.mean(np.diff(t)))
     dx = float(np.mean(np.diff(x)))
 
     train_samples = samples_norm[train_idx]
     val_samples = samples_norm[val_idx]
+    validation_latent = None
+    validation_t = None
+    validation_x = None
 
-    model, train_losses, val_losses, lr_history, smoothness_history, dynamics_history = train_autoencoder(
+    if validation_case_dir is not None:
+        validation_f_t_x_v, validation_t, validation_x, validation_v = load_distribution(validation_case_dir)
+        if validation_f_t_x_v.shape[2] != nv:
+            raise ValueError(
+                f"Validation case Nv mismatch: training Nv={nv}, validation Nv={validation_f_t_x_v.shape[2]}"
+            )
+        if validation_v.shape != v.shape or not np.allclose(validation_v, v, rtol=1e-6, atol=1e-8):
+            raise ValueError("Validation case velocity grid does not match the training case.")
+        validation_transformed_t_x_v = relative_reference_target(validation_f_t_x_v, f0_v, args.f0_epsilon)
+        validation_samples = flatten_snapshots(validation_transformed_t_x_v)
+        val_samples = apply_normalization(validation_samples, transformed_mean, transformed_std)
+        validation_grid = reshape_sample_grid(
+            val_samples,
+            nt=validation_f_t_x_v.shape[0],
+            nx=validation_f_t_x_v.shape[1],
+        )
+
+    (
+        model,
+        train_losses,
+        val_losses,
+        lr_history,
+        smoothness_history,
+        dynamics_history,
+        electric_history,
+        vlasov_residual_history,
+        validation_electric_history,
+    ) = train_autoencoder(
         train_samples=train_samples,
         val_samples=val_samples,
         samples_grid=samples_grid,
+        validation_grid=validation_grid,
         latent_dim=args.latent_dim,
         hidden_dim=args.hidden_dim,
         conv_channels=conv_channels,
         kernel_size=args.kernel_size,
+        padding_mode=args.padding_mode,
         epochs=args.epochs,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
@@ -1024,9 +1402,12 @@ def main() -> None:
         reg_x_window=args.reg_x_window,
         reg_patches_per_epoch=args.reg_patches_per_epoch,
         density_weight=args.density_weight,
+        electric_weight=args.electric_weight,
+        vlasov_residual_weight=args.vlasov_residual_weight,
         feature_mean=mean,
         feature_std=std,
         density_weights=density_weights,
+        v_coords=v,
         seed=args.seed,
         device=device,
     )
@@ -1042,6 +1423,18 @@ def main() -> None:
     )
     print(f"Latent shape per snapshot: ({nx}, {args.latent_dim})")
     print(f"Saved latent array shape: {latent.shape}")
+
+    if validation_case_dir is not None and validation_grid is not None and validation_t is not None and validation_x is not None:
+        validation_latent = encode_all(
+            model=model,
+            samples=val_samples,
+            nt=validation_grid.shape[0],
+            nx=validation_grid.shape[1],
+            latent_dim=args.latent_dim,
+            batch_size=args.batch_size,
+            device=device,
+        )
+        print(f"Validation latent array shape: {validation_latent.shape}")
 
     full_reconstruction = reconstruct_all(
         model=model,
@@ -1076,28 +1469,50 @@ def main() -> None:
         latent=latent,
         mean=mean,
         std=std,
+        f0_v=f0_v,
+        f0_scale_v=f0_scale_v,
+        f0_epsilon=args.f0_epsilon,
         train_losses=train_losses,
         val_losses=val_losses,
         lr_history=lr_history,
         smoothness_history=smoothness_history,
         dynamics_history=dynamics_history,
+        electric_history=electric_history,
+        vlasov_residual_history=vlasov_residual_history,
+        validation_electric_history=validation_electric_history,
         model=model,
         device=device,
         args=args,
         metrics=metrics,
         reconstruction=reconstruction,
     )
+    if validation_case_dir is not None and validation_latent is not None:
+        if validation_output_path is None:
+            validation_output_path = output_path.with_name(f"{output_path.stem}_validation.npz")
+        save_latent_only_results(
+            output_path=validation_output_path,
+            case_dir=validation_case_dir,
+            t=np.asarray(validation_t, dtype=np.float32),
+            x=np.asarray(validation_x, dtype=np.float32),
+            latent=validation_latent,
+            train_case_dir=case_dir,
+        )
     save_encoder_checkpoint(
         encoder_output_path=encoder_output_path,
         model=model,
         mean=mean,
         std=std,
+        f0_v=f0_v,
+        f0_scale_v=f0_scale_v,
+        f0_epsilon=args.f0_epsilon,
         v=v,
         x=x,
         t=t,
         case_dir=case_dir,
     )
     print(f"Results written to: {output_path}")
+    if validation_case_dir is not None and validation_output_path is not None:
+        print(f"Validation latent written to: {validation_output_path}")
     print(f"Encoder checkpoint written to: {encoder_output_path}")
 
 

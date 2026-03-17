@@ -26,70 +26,55 @@ Library terms:
   06: z_2_x
   07: z_3
   08: z_3_x
-  09: z_4
-  10: z_4_x
 
 Mode 0
-  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03_04
-  sample_fit_mse: 4.771579e-02
-  full_fit_mse: 4.837355e-02
-  residual_l2: 1.187512e+02
-  ut_l2: 8.657015e+01
-  relative_residual_l2: 1.371734e+00
-  selected_points: 128000
-  train_points: 128000
-  test_points: 128000
-  nonzero_terms: 6
-  equation: z_0_t = +4.486453e-01*z_1 +7.603381e-01*z_1_x +6.192404e-01*z_2 +1.491139e+00*z_2_x +6.654209e-01*z_3 +5.127388e-01*z_4_x
-
-Mode 1
-  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03_04
-  sample_fit_mse: 6.018928e-02
-  full_fit_mse: 6.083542e-02
-  residual_l2: 5.536815e+01
-  ut_l2: 2.229134e+02
-  relative_residual_l2: 2.483841e-01
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03
+  sample_fit_mse: 1.699527e-01
+  full_fit_mse: 1.707194e-01
+  residual_l2: 2.436248e+02
+  ut_l2: 3.446806e+02
+  relative_residual_l2: 7.068133e-01
   selected_points: 128000
   train_points: 128000
   test_points: 128000
   nonzero_terms: 4
-  equation: z_1_t = +3.141382e-01*z_1_x +6.267916e-01*z_3 -1.215944e-01*z_3_x +5.243561e-01*z_4
+  equation: z_0_t = -8.884630e-01*z_1_x -5.219307e-02*z_2 +2.140942e-01*z_3 -9.958485e-01*z_3_x
+
+Mode 1
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03
+  sample_fit_mse: 2.118095e-01
+  full_fit_mse: 2.075048e-01
+  residual_l2: 1.348862e+02
+  ut_l2: 2.321382e+02
+  relative_residual_l2: 5.810599e-01
+  selected_points: 128000
+  train_points: 128000
+  test_points: 128000
+  nonzero_terms: 4
+  equation: z_1_t = -4.426697e-01*z_0_x +3.924742e-01*z_1 -7.465252e-01*z_1_x +3.819795e-01*z_3
 
 Mode 2
-  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03_04
-  sample_fit_mse: 5.683422e-02
-  full_fit_mse: 5.776543e-02
-  residual_l2: 2.897712e+01
-  ut_l2: 2.061418e+02
-  relative_residual_l2: 1.405689e-01
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03
+  sample_fit_mse: 1.921496e-01
+  full_fit_mse: 1.915309e-01
+  residual_l2: 2.704065e+02
+  ut_l2: 3.565114e+02
+  relative_residual_l2: 7.584792e-01
   selected_points: 128000
   train_points: 128000
   test_points: 128000
-  nonzero_terms: 6
-  equation: z_2_t = -4.863923e-01*z_0 -2.168520e-01*z_1_x -8.590063e-02*z_2_x +5.688042e-01*z_3 +1.253490e-01*z_3_x -6.178020e-01*z_4
+  nonzero_terms: 5
+  equation: z_2_t = +3.701135e-01*z_0_x +4.898890e-01*z_1 +6.753915e-01*z_1_x +4.487772e-01*z_3 -3.396993e-01*z_3_x
 
 Mode 3
-  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03_04
-  sample_fit_mse: 3.882267e-02
-  full_fit_mse: 3.888254e-02
-  residual_l2: 3.389419e+01
-  ut_l2: 2.027068e+02
-  relative_residual_l2: 1.672080e-01
+  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03
+  sample_fit_mse: 2.313945e-01
+  full_fit_mse: 2.299236e-01
+  residual_l2: 2.424913e+02
+  ut_l2: 3.539916e+02
+  relative_residual_l2: 6.850198e-01
   selected_points: 128000
   train_points: 128000
   test_points: 128000
-  nonzero_terms: 7
-  equation: z_3_t = +3.217810e-02*z_0_x -8.143389e-01*z_1 -8.993703e-01*z_2 +2.395863e-01*z_2_x +3.090658e-01*z_3 +1.896852e-02*z_3_x +1.091591e-01*z_4_x
-
-Mode 4
-  log_dir: /home/uts22/projects/ML_phisycs/PDE_find/results/landau_case_01/deepymod_logs/coupled_modes_00_01_02_03_04
-  sample_fit_mse: 6.720148e-02
-  full_fit_mse: 6.798565e-02
-  residual_l2: 1.936186e+02
-  ut_l2: 2.240441e+02
-  relative_residual_l2: 8.641987e-01
-  selected_points: 128000
-  train_points: 128000
-  test_points: 128000
-  nonzero_terms: 8
-  equation: z_4_t = +3.776208e-01*z_0 -7.977712e-01*z_0_x -7.219273e-01*z_1 -2.759889e-01*z_2 +2.851573e-01*z_3 +1.235278e+00*z_3_x +6.608182e-01*z_4 -5.146759e-01*z_4_x
+  nonzero_terms: 3
+  equation: z_3_t = -8.064034e-01*z_1 +9.470068e-01*z_1_x +7.286080e-01*z_3_x

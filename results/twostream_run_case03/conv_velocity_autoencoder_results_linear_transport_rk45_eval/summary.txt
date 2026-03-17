@@ -1,0 +1,19 @@
+pde_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results_linear_transport.npz
+latent_file: /home/uts22/projects/ML_phisycs/PDE_find/results/twostream_run_case03/conv_velocity_autoencoder_results.npz
+case_dir: /home/uts22/projects/ML_phisycs/PDE_find/vlasov_twostream_param_grid/T_1.00_k_1.00
+system_mode: coupled
+space_diff: Fourier
+used_electric_field: False
+mode_indices: [0, 1, 2, 3, 4, 5]
+solver: RK45
+rk4_substeps: 1
+fill_unmodeled: truth
+solver_success: True
+solver_message: The solver successfully reached the end of the integration interval.
+solver_nfev: 6026
+solver_mean_relative_l2: 4.292263221854e-01
+solver_max_relative_l2: 5.737478235877e-01
+solver_final_relative_l2: 5.684425033211e-01
+ae_mean_relative_l2: 1.688324438489e-02
+ae_max_relative_l2: 4.884518547854e-02
+ae_final_relative_l2: 4.884518547854e-02
